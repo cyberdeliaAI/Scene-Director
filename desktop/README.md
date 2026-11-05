@@ -4,7 +4,7 @@ Version **3.6.0-beta.1**, based on Scene Director 3.6.0. A self-contained Electr
 
 ## Install and use
 
-This repository includes the desktop source and build instructions, not a downloadable standalone app. The following steps apply to a locally built or separately supplied test bundle.
+Download the standalone test bundle from the [private macOS test release](https://github.com/cyberdeliaAI/Scene-Director/releases/tag/v3.6.0-beta.1). This repository also includes the desktop source and build instructions.
 
 1. Extract `Scene_Director_3.6.0-beta.1_macOS_arm64.zip`.
 2. Drag **Scene Director.app** to Applications, or open it from the extracted folder.
