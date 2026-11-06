@@ -1,12 +1,12 @@
 # Scene Director for Apple Silicon — test build
 
-Version **3.6.0-beta.1**, based on Scene Director 3.6.0. A self-contained Electron app with the existing English interface and a bundled Python service. It writes prompts; image changes produce a revised prompt or edit instruction, not an edited image file.
+Version **3.7.0-beta.1**, based on Scene Director 3.7.0. A self-contained Electron app with the existing English interface and a bundled Python service. It writes prompts; image changes produce a revised prompt or edit instruction, not an edited image file.
 
 ## Install and use
 
-Download the standalone test bundle from the [private macOS test release](https://github.com/cyberdeliaAI/Scene-Director/releases/tag/v3.6.0-beta.1). This repository also includes the desktop source and build instructions.
+Download the standalone test bundle from the [private macOS test release](https://github.com/cyberdeliaAI/Scene-Director/releases/tag/v3.7.0-beta.1). This repository also includes the desktop source and build instructions.
 
-1. Extract `Scene_Director_3.6.0-beta.1_macOS_arm64.zip`.
+1. Extract `Scene_Director_3.7.0-beta.1_macOS_arm64.zip`.
 2. Drag **Scene Director.app** to Applications, or open it from the extracted folder.
 3. Open LM Studio, load a language model and start its local server. Use a vision-capable model for image uploads.
 4. Open Scene Director and click its connection status to set the server and model. All scene, two-subject, image-reference, image-change, prompt-rewrite and sampling controls are included.
@@ -34,6 +34,10 @@ The **LoRA Dataset** tab prepares a batch of images for training: first crop/res
 
 The dataset session, including source image copies and manual edits, is saved locally under this app profile for recovery. Clear session removes its local copy, not your originals or exported datasets. Supported sources: PNG/JPEG/WebP, up to 100 MB and 40 megapixels each; up to 1,000 images and a 512 MB ZIP. Processed image exports are re-encoded and omit embedded metadata. The tool prepares training data; it does not train LoRAs. See the main README for detailed behavior.
 
+## Edit a prompt
+
+Choose **Edit a prompt** for small changes to an existing prompt. Paste **Original prompt**, describe **What should change?**, and press **Apply prompt changes**. The instructions ask the model to preserve unrelated wording, prompt syntax, tags and weights, while consistently updating necessary references such as pronouns. Removing makeup also removes contradictory cosmetics; changing a woman into a man does not request changes to hair, clothing or pose. The result is a complete English prompt saved as `prompt-edit_*.txt`. **Use as input** copies it into the source field for a follow-up edit. No image is needed or sent, and scene/LoRA/profile rules do not apply. Results depend on the selected model and should be reviewed.
+
 ## Shared presets and prompt rewriting
 
 Choose **Rewrite a prompt** for text-to-prompt conversion. Paste an existing prompt, select a preset and review the visible system instructions. **Use an image (Vision)** enables optional image-to-prompt or image-plus-text rewriting with its own separate instructions. Text-only mode ignores attached images. The scene generator's LoRA, variety and image-model rules are not added to this workflow.
@@ -55,7 +59,7 @@ npm ci
 npm run build:mac
 ```
 
-Output: `dist/3.6.0-beta.1/Scene Director-darwin-arm64/Scene Director.app`.
+Output: `dist/3.7.0-beta.1/Scene Director-darwin-arm64/Scene Director.app`.
 
 The custom app icon is in `assets/SceneDirector.icns`, with the original PNG and generation prompt alongside it. It was generated with built-in imagegen; macOS icon sizes were exported from that artwork. The web interface uses `../web/app-icon.png`.
 
@@ -66,7 +70,7 @@ Run the checks from the parent `Scene Director` folder:
 ```sh
 python3 -m unittest -q
 node --test desktop/folder-picker.test.cjs desktop/dataset.test.cjs
-SCENE_DIRECTOR_TEST_BACKEND="$PWD/desktop/dist/3.6.0-beta.1/Scene Director-darwin-arm64/Scene Director.app/Contents/Resources/backend/scene-director-backend" python3 -m unittest test_desktop -q
+SCENE_DIRECTOR_TEST_BACKEND="$PWD/desktop/dist/3.7.0-beta.1/Scene Director-darwin-arm64/Scene Director.app/Contents/Resources/backend/scene-director-backend" python3 -m unittest test_desktop -q
 ```
 
 Desktop integration tests cover private-session access, bundled assets, both image-model profiles, vision input, saved settings, relaunch and shutdown during generation. They use temporary profiles and fake local model servers. Actual prompt quality and model compatibility depend on your selected model and were not evaluated using a live model for this build.

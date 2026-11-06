@@ -27,7 +27,7 @@ async function main() {
     icon: path.join(__dirname, 'assets', 'SceneDirector.icns'),
     electronVersion: require('./package.json').devDependencies.electron,
     out: path.join(__dirname, 'dist', version), overwrite: true, asar: true,
-    appBundleId: 'com.scenedirector.desktop.test', appVersion: version, buildVersion: '3.6.0.1',
+    appBundleId: 'com.scenedirector.desktop.test', appVersion: version, buildVersion: '3.7.0.1',
     appCopyright: 'Scene Director',
     extendInfo: { LSMinimumSystemVersion: '13.0', NSHighResolutionCapable: true,
       NSHumanReadableCopyright: 'Scene Director — Apple Silicon test',

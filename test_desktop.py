@@ -186,6 +186,20 @@ class DesktopTests(unittest.TestCase):
         self.assertEqual(len(list(self.output_dir.glob("prompt-rewrite_vision_*.txt"))), 1)
         self.assertIsInstance(model.requests[1]["messages"][1]["content"], list)
 
+    def test_targeted_prompt_edit_works_through_the_private_service(self):
+        result = "A bare-faced woman, blue coat, Amsterdam."
+        with FakeServer([result], stream=True, vision=False) as model:
+            self.launch()
+            events = self.run_job({"workflow": "edit_prompt",
+                "source_prompt": "A woman with red lipstick, blue coat, Amsterdam.",
+                "changes": "Remove her makeup.", "api_url": model.url, "output_dir": str(self.output_dir)})
+        self.assertEqual(events[0]["workflow"], "edit_prompt")
+        self.assertEqual(next(e["text"] for e in events if e["type"] == "prompt"), result)
+        files = list(self.output_dir.glob("prompt-edit_*.txt"))
+        self.assertEqual(len(files), 1)
+        self.assertEqual(files[0].read_text().strip(), result)
+        self.assertIsInstance(model.requests[0]["messages"][1]["content"], str)
+
     def test_dataset_caption_is_transient_and_uses_vision(self):
         with FakeServer(["A woman wearing a blue coat."], vision=True, stream=True) as model:
             self.launch()

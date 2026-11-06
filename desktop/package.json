@@ -1,7 +1,7 @@
 {
   "name": "scene-director-desktop",
   "productName": "Scene Director",
-  "version": "3.6.0-beta.1",
+  "version": "3.7.0-beta.1",
   "description": "Scene Director \u2014 Apple Silicon desktop test",
   "author": "Scene Director",
   "private": true,

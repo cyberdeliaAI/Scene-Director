@@ -320,7 +320,7 @@ dialog::backdrop { background: rgba(10, 12, 16, .6); }
 .image-dropzone:focus-within { outline: 2px solid var(--accent); outline-offset: 3px; }
 .image-dropzone .image-file { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; }
 .seg.workflows { display: grid; grid-template-columns: 1fr 1fr; }
-.seg.workflows label:last-child { grid-column: 1 / -1; }
+.prompt-edit-text { white-space: pre-wrap; }
 .preset-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
 #rewriteSystem { min-height: 210px; font-size: 13px; line-height: 1.55; }
 .drop-copy { display: grid; gap: 5px; pointer-events: none; }
@@ -373,6 +373,7 @@ dialog { max-height: calc(100dvh - 32px); overflow-y: auto; }
         <label><input type="radio" name="workflow" value="scenes" checked><span>Generate scenes</span></label>
         <label><input type="radio" name="workflow" value="change_image"><span>Change an image</span></label>
         <label><input type="radio" name="workflow" value="rewrite"><span>Rewrite a prompt</span></label>
+        <label><input type="radio" name="workflow" value="edit_prompt"><span>Edit a prompt</span></label>
       </div>
       <p class="help" id="workflowHint">Invent scenes from a creative brief, with an optional reference.</p>
     </fieldset>
@@ -390,6 +391,19 @@ dialog { max-height: calc(100dvh - 32px); overflow-y: auto; }
       </div>
       <p class="help" id="targetHint"></p>
     </fieldset>
+
+    <div id="promptEditControls" hidden>
+      <fieldset class="group">
+        <legend><label for="promptEditSource">Original prompt</label></legend>
+        <textarea id="promptEditSource" data-bind="promptEditSource" rows="7" maxlength="20000" placeholder="Paste the complete prompt you want to edit."></textarea>
+        <p class="help">The result keeps your prompt's unrelated wording, details, tags and weights. Your original stays here until you replace it.</p>
+      </fieldset>
+      <fieldset class="group">
+        <legend><label for="promptEditChanges">What should change?</label></legend>
+        <textarea id="promptEditChanges" data-bind="promptEditChanges" rows="4" maxlength="4000" placeholder="Remove her makeup, including the lipstick and eyeliner. Keep everything else the same."></textarea>
+        <p class="help">For example: “Change the woman to a man” or “Make only her shoes red.” Necessary references and pronouns are updated together. You can write the request in Dutch; the result is English.</p>
+      </fieldset>
+    </div>
 
     <div id="rewriteControls" hidden>
       <fieldset class="group">
@@ -732,6 +746,7 @@ dialog { max-height: calc(100dvh - 32px); overflow-y: auto; }
 
   const brief = {
     workflow: "scenes", changes: "", editOutput: "full_prompt", preserve: "",
+    promptEditSource: "", promptEditChanges: "",
     rewritePrompt: "", rewriteVision: false,
     rewriteTextSystem: "", rewriteVisionSystem: "",
     rewriteTextPreset: "builtin:faithful", rewriteVisionPreset: "builtin:vision",
@@ -763,7 +778,7 @@ dialog { max-height: calc(100dvh - 32px); overflow-y: auto; }
         if (!Array.isArray(brief.avoid)) brief.avoid = [];
         if (!Array.isArray(brief.fixed)) brief.fixed = [];
         if (!(brief.referenceMode in REFERENCE_HINTS)) brief.referenceMode = "inspiration";
-        if (!["scenes", "change_image", "rewrite"].includes(brief.workflow)) brief.workflow = "scenes";
+        if (!["scenes", "change_image", "rewrite", "edit_prompt"].includes(brief.workflow)) brief.workflow = "scenes";
         if (!["full_prompt", "edit_instruction"].includes(brief.editOutput)) brief.editOutput = "full_prompt";
       }
     } catch (e) { /* storage unavailable: start with defaults */ }
@@ -788,6 +803,7 @@ dialog { max-height: calc(100dvh - 32px); overflow-y: auto; }
   function renderWorkflow() {
     const editing = brief.workflow === "change_image";
     const rewriting = brief.workflow === "rewrite";
+    const promptEditing = brief.workflow === "edit_prompt";
     const imageFirst = editing || (rewriting && brief.rewriteVision);
     const section = $("#referenceSection"), slot = $("#sourceImageSlot");
     slot.hidden = !imageFirst;
@@ -796,19 +812,20 @@ dialog { max-height: calc(100dvh - 32px); overflow-y: auto; }
     } else if (section.previousElementSibling !== $("#referenceHome")) {
       $("#referenceHome").after(section);
     }
-    $("#sceneControls").hidden = editing || rewriting;
+    $("#sceneControls").hidden = editing || rewriting || promptEditing;
     $("#changeControls").hidden = !editing;
     $("#rewriteControls").hidden = !rewriting;
     $("#rewriteModeControls").hidden = !rewriting;
-    $("#targetGroup").hidden = rewriting;
-    $("#more").hidden = editing || rewriting;
-    section.hidden = rewriting && !brief.rewriteVision;
+    $("#promptEditControls").hidden = !promptEditing;
+    $("#targetGroup").hidden = rewriting || promptEditing;
+    $("#more").hidden = editing || rewriting || promptEditing;
+    section.hidden = promptEditing || (rewriting && !brief.rewriteVision);
     $("#referenceGuide").hidden = editing || rewriting;
     $("#referenceTitle").textContent = editing ? "Source image" : "Reference image";
     $("#referenceOptional").hidden = editing;
     if (imageFirst) section.open = true;
     $("#referenceOptional").hidden = imageFirst;
-    $("#workflowHint").textContent = rewriting ? "Transform one prompt using your chosen system instructions, with optional Vision input." : editing ? "Upload an image and request specific changes. Keep the rest of the scene." : "Invent scenes from a creative brief, with an optional reference.";
+    $("#workflowHint").textContent = promptEditing ? "Change only what you ask in an existing prompt. Keep everything else." : rewriting ? "Transform one prompt using your chosen system instructions, with optional Vision input." : editing ? "Upload an image and request specific changes. Keep the rest of the scene." : "Invent scenes from a creative brief, with an optional reference.";
     $("#referenceHelp").textContent = (imageFirst ? "Required. " : "") + "PNG, JPEG or WebP, up to 5 MB. Requires a vision-capable language model. Sent to your selected model server only when you press Write; not saved in settings or prompt files.";
     renderRewrite(); renderStart(); renderReference();
   }
@@ -911,6 +928,7 @@ dialog { max-height: calc(100dvh - 32px); overflow-y: auto; }
     }
   }
   function renderStart() {
+    if (brief.workflow === "edit_prompt") { $("#startBtn").textContent = "Apply prompt changes"; return; }
     if (brief.workflow === "rewrite") { $("#startBtn").textContent = "Rewrite prompt"; return; }
     if (brief.workflow === "change_image") {
       $("#startBtn").textContent = brief.editOutput === "edit_instruction" ? "Write edit instruction" : "Write revised prompt";
@@ -940,7 +958,8 @@ dialog { max-height: calc(100dvh - 32px); overflow-y: auto; }
     }
     else $("#referencePreview").removeAttribute("src");
     const rewriting = brief.workflow === "rewrite";
-    $("#startBtn").disabled = !!run.id || reference.loading ||
+    $("#startBtn").disabled = !!run.id || (brief.workflow !== "edit_prompt" && reference.loading) ||
+      (brief.workflow === "edit_prompt" && (!brief.promptEditSource.trim() || !brief.promptEditChanges.trim())) ||
       (brief.workflow === "change_image" && (!reference.data_url || !brief.changes.trim())) ||
       (rewriting && (!brief[rewriteKeys()[0]].trim() || (brief.rewriteVision ? !reference.data_url : !brief.rewritePrompt.trim())));
   }
@@ -1109,7 +1128,7 @@ dialog { max-height: calc(100dvh - 32px); overflow-y: auto; }
     return server === "lmstudio" ? "LM Studio" : server === "ollama" ? "Ollama" : "your server";
   }
   function referenceForRun() {
-    return !!reference.data_url && (brief.workflow !== "rewrite" || brief.rewriteVision);
+    return brief.workflow !== "edit_prompt" && !!reference.data_url && (brief.workflow !== "rewrite" || brief.rewriteVision);
   }
   async function checkConnection() {
     setPill("", "Checking connection");
@@ -1314,8 +1333,9 @@ dialog { max-height: calc(100dvh - 32px); overflow-y: auto; }
     const empty = el("div", "empty");
     const editing = brief.workflow === "change_image";
     const rewriting = brief.workflow === "rewrite";
-    empty.appendChild(el("p", "", rewriting ? "Your rewritten prompt appears here." : editing ? "Your revised prompt or edit instruction appears here." : "Your prompts appear here as they are written, one scene at a time."));
-    empty.appendChild(el("p", "muted", rewriting ? "Paste a prompt, choose system instructions and press Rewrite prompt. Enable Vision to use an image." : editing ? "Upload a source image and describe the changes. Unrequested details stay the same." : "Pick a subject and a direction, then press Write. Anything you leave blank, the model invents."));
+    const promptEditing = brief.workflow === "edit_prompt";
+    empty.appendChild(el("p", "", promptEditing ? "Your edited prompt appears here." : rewriting ? "Your rewritten prompt appears here." : editing ? "Your revised prompt or edit instruction appears here." : "Your prompts appear here as they are written, one scene at a time."));
+    empty.appendChild(el("p", "muted", promptEditing ? "Paste the original prompt, describe only the changes and press Apply prompt changes." : rewriting ? "Paste a prompt, choose system instructions and press Rewrite prompt. Enable Vision to use an image." : editing ? "Upload a source image and describe the changes. Unrequested details stay the same." : "Pick a subject and a direction, then press Write. Anything you leave blank, the model invents."));
     empty.appendChild(el("p", "muted", "Make sure a model is loaded in LM Studio and its server is running. The connection status sits at the top of this page."));
     page.appendChild(empty);
   }
@@ -1364,7 +1384,7 @@ dialog { max-height: calc(100dvh - 32px); overflow-y: auto; }
     let content = run.live.content, thinking = run.live.reasoning;
     const think = /<think>([\s\S]*?)(<\/think>|$)/i.exec(content);
     if (think) { thinking += think[1]; content = content.replace(think[0], ""); }
-    if (run.workflow === "rewrite") return { content: content.trim(), thinking: thinking.trim(), ideas: null, prompts: null };
+    if (["rewrite", "edit_prompt"].includes(run.workflow)) return { content: content.trim(), thinking: thinking.trim(), ideas: null, prompts: null };
     const ideas = partialList(content, "ideas");
     const prompts = partialList(content, "prompts");
     return { content: content.trim(), thinking: thinking.trim(), ideas, prompts };
@@ -1392,7 +1412,7 @@ dialog { max-height: calc(100dvh - 32px); overflow-y: auto; }
     const head = el("div", "live-head");
     head.appendChild(el("span", "pulse"));
     const range = live.first === live.last ? `prompt ${live.first}` : `prompts ${live.first} to ${live.last}`;
-    const phase = run.workflow === "rewrite" && parts.content ? "Rewriting" : parts.prompts && parts.prompts.length ? "Writing" : parts.ideas && parts.ideas.length ? "Choosing scenes for" : parts.thinking ? "Thinking about" : "Waiting for the model on";
+    const phase = run.workflow === "edit_prompt" && parts.content ? "Editing" : run.workflow === "rewrite" && parts.content ? "Rewriting" : parts.prompts && parts.prompts.length ? "Writing" : parts.ideas && parts.ideas.length ? "Choosing scenes for" : parts.thinking ? "Thinking about" : "Waiting for the model on";
     head.appendChild(el("span", "", `${phase} ${range}${live.attempt > 1 ? " (retry)" : ""}`));
     const seconds = Math.round((Date.now() - live.started) / 1000);
     head.appendChild(el("span", "elapsed", seconds >= 60 ? `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}` : `${seconds} s`));
@@ -1417,10 +1437,11 @@ dialog { max-height: calc(100dvh - 32px); overflow-y: auto; }
         scene.appendChild(body);
         block.appendChild(scene);
       }
-    } else if (parts.content && (run.workflow === "rewrite" || (!parts.content.startsWith("{") && !parts.content.startsWith("```")))) {
+    } else if (parts.content && (["rewrite", "edit_prompt"].includes(run.workflow) || (!parts.content.startsWith("{") && !parts.content.startsWith("```")))) {
       // A model that ignores the JSON format: show its raw text.
       const scene = el("article", "scene draft");
-      const body = el("p", "action", run.workflow === "rewrite" ? parts.content : parts.content.slice(-1600));
+      const body = el("p", "action", ["rewrite", "edit_prompt"].includes(run.workflow) ? parts.content : parts.content.slice(-1600));
+      if (run.workflow === "edit_prompt") body.classList.add("prompt-edit-text");
       body.appendChild(el("span", "caret"));
       scene.appendChild(body);
       block.appendChild(scene);
@@ -1436,13 +1457,27 @@ dialog { max-height: calc(100dvh - 32px); overflow-y: auto; }
     const scene = el("article", "scene new");
     scene.appendChild(el("span", "scene-no", String(event.index)));
     if (event.idea) scene.appendChild(el("h3", "slug", event.idea.replace(/\.$/, "")));
-    scene.appendChild(el("p", "action", event.text));
+    scene.appendChild(el("p", "action" + (run.workflow === "edit_prompt" ? " prompt-edit-text" : ""), event.text));
     const foot = el("div", "scene-foot");
     foot.appendChild(el("span", "", `${event.words || event.text.split(/\s+/).length} words`));
     const copy = el("button", "copy", "Copy");
     copy.type = "button";
     copy.addEventListener("click", () => copyText(event.text, copy, "Copy"));
     foot.appendChild(copy);
+    if (run.workflow === "edit_prompt") {
+      const reuse = el("button", "copy", "Use as input");
+      reuse.type = "button";
+      reuse.addEventListener("click", () => {
+        if (run.id) return;
+        brief.workflow = "edit_prompt";
+        $('input[name="workflow"][value="edit_prompt"]').checked = true;
+        brief.promptEditSource = event.text;
+        $("#promptEditSource").value = event.text;
+        brief.promptEditChanges = ""; $("#promptEditChanges").value = "";
+        renderWorkflow(); changed(); checkConnection(); $("#promptEditChanges").focus();
+      });
+      foot.appendChild(reuse);
+    }
     scene.appendChild(foot);
     page.appendChild(scene);
     if (page.scrollHeight > page.clientHeight) page.scrollTo({ top: page.scrollHeight, behavior: "smooth" });
@@ -1491,7 +1526,7 @@ dialog { max-height: calc(100dvh - 32px); overflow-y: auto; }
       case "start":
         run.total = event.count;
         run.workflow = event.workflow;
-        $("#meta").textContent = event.workflow === "rewrite" ? `Rewritten prompt, written by ${event.model}` : event.workflow === "change_image" ? `${event.output_kind === "edit_instruction" ? "Edit instruction" : "Revised prompt"} for ${event.target_label}, written by ${event.model}` : `${event.count} for ${event.target_label}, written by ${event.model}`;
+        $("#meta").textContent = event.workflow === "edit_prompt" ? `Edited prompt, written by ${event.model}` : event.workflow === "rewrite" ? `Rewritten prompt, written by ${event.model}` : event.workflow === "change_image" ? `${event.output_kind === "edit_instruction" ? "Edit instruction" : "Revised prompt"} for ${event.target_label}, written by ${event.model}` : `${event.count} for ${event.target_label}, written by ${event.model}`;
         setStatus(`Writing… the first batch can take a minute on a local model.`);
         break;
       case "batch":
@@ -1561,9 +1596,13 @@ dialog { max-height: calc(100dvh - 32px); overflow-y: auto; }
   async function start(e) {
     if (e) e.preventDefault();
     if (run.id) return;
-    if (reference.loading) { setStatus("Wait for the reference image to finish loading."); return; }
+    if (reference.loading && brief.workflow !== "edit_prompt") { setStatus("Wait for the reference image to finish loading."); return; }
     const editing = brief.workflow === "change_image";
     const rewriting = brief.workflow === "rewrite";
+    const promptEditing = brief.workflow === "edit_prompt";
+    if (promptEditing && (!brief.promptEditSource.trim() || !brief.promptEditChanges.trim())) {
+      setStatus("Paste the original prompt and describe what should change first."); return;
+    }
     if (rewriting && (!brief[rewriteKeys()[0]].trim() || (brief.rewriteVision ? !reference.data_url : !brief.rewritePrompt.trim()))) {
       setStatus("Choose system instructions and paste a prompt, or enable Vision and upload an image."); return;
     }
@@ -1603,6 +1642,10 @@ dialog { max-height: calc(100dvh - 32px); overflow-y: auto; }
         api_url: conn.api_url, api_key: conn.api_key, model: conn.model, output_dir: conn.output_dir || defaultOutputDir };
       if (brief.rewriteVision) request.reference_image = { data_url: reference.data_url };
     }
+    if (promptEditing) request = {
+      workflow: "edit_prompt", count: 1, source_prompt: brief.promptEditSource.trim(), changes: brief.promptEditChanges.trim(),
+      api_url: conn.api_url, api_key: conn.api_key, model: conn.model, output_dir: conn.output_dir || defaultOutputDir
+    };
     setStatus("Starting…");
     try {
       const result = await api("/api/generate", request);

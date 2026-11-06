@@ -6,9 +6,9 @@ Give a direction. Get distinct, surprising image prompts for **Krea 2** and **Z-
 
 Scene Director asks a local language model to invent the scenes for you. You set a subject and a direction like `jobs` or `sport`. The model picks different moments, places, clothing, framing and light for every prompt, within the limits you set. Prompts are always English, even when your brief is Dutch.
 
-Version 3.6.0. Python 3.9 or newer. No packages to install.
+Version 3.7.0. Python 3.9 or newer. No packages to install.
 
-An experimental **Electron app for Apple Silicon** is available, version 3.6.0-beta.1. [Download the macOS test app](https://github.com/cyberdeliaAI/Scene-Director/releases/tag/v3.6.0-beta.1) from this private repository's Releases page. It includes Python and opens in its own Mac window. Apple Silicon and macOS 13 or newer are required. See [desktop/README.md](desktop/README.md) for installation, storage locations and build instructions. Source is included here; compiled apps are attached to releases. The browser launchers continue to work as before.
+An experimental **Electron app for Apple Silicon** is available, version 3.7.0-beta.1. [Download the macOS test app](https://github.com/cyberdeliaAI/Scene-Director/releases/tag/v3.7.0-beta.1) from this private repository's Releases page. It includes Python and opens in its own Mac window. Apple Silicon and macOS 13 or newer are required. See [desktop/README.md](desktop/README.md) for installation, storage locations and build instructions. Source is included here; compiled apps are attached to releases. The browser launchers continue to work as before.
 
 ## Quick start with LM Studio
 
@@ -82,6 +82,18 @@ Source images, crop edits, settings and captions are saved in this app's local I
 This first version supports up to 1,000 images, 100 MB per source file, 40 megapixels per decoded image and a 512 MB dataset ZIP. It uses browser image decoding/canvas processing, with EXIF orientation applied by the decoder. An unchanged full-frame image in source format at its original resolution is exported using its original bytes. Cropped, resized, rotated, flipped or converted images are re-encoded; embedded metadata is not preserved in those processed exports. JPEG uses a white background for transparency. TIFF/BMP, direct sidecar writes beside originals, CyberHub's module system and automatic training are not included.
 
 The main workflow was checked in the Apple Silicon app with two sample images and a mock vision server: 1024-square preparation, batch captions, a manual correction, paired ZIP export, full app restart/session recovery and switching independently to Prompt Studio. The archive and the actual images sent to the mock model were independently checked. These tests verify the application flow, not caption quality from a live model.
+
+## Edit a prompt: change only what you request
+
+Choose **Edit a prompt** for targeted text edits, separate from preset-based rewriting and image changes.
+
+1. Paste the complete prompt into **Original prompt**.
+2. Describe **What should change?**, such as `Remove her makeup, including lipstick and eyeliner` or `Change the woman to a man`.
+3. Press **Apply prompt changes**. Copy the complete result, or choose **Use as input** for another edit. The original source is retained until you replace it.
+
+The model is instructed to make the smallest coherent edit and preserve unrelated wording, tags, weights, trigger tokens, names, camera details, formatting and scene content. Necessary references and pronouns are updated together. A gender change does not request a different hairstyle, outfit or pose. Removing makeup removes conflicting cosmetics while keeping natural skin details. Instructions can be Dutch; output is English. No image is needed or sent, even if one is retained in another workflow. The scene generator's country, identity, word-count and image-model rules do not apply.
+
+Each run produces one result and saves it as `prompt-edit_*.txt` in the configured output folder. The model's returned line breaks are preserved. Empty replies and replies explicitly marked truncated or filtered by the server are not saved as completed edits. The tool is model-driven; review the result for unintended changes. The source prompt supports 20,000 characters; requested changes support 4,000.
 
 ## Rewrite a prompt
 
@@ -211,6 +223,13 @@ python3 scene_director.py --help
 | `Start Scene Director.command` / `.bat` / `start_scene_director.sh` | Launchers for macOS, Windows and Linux. |
 | `test_scene_director.py` | Tests. Run `python3 -m unittest` in this folder. |
 | `settings.json` | Created when you save connection settings. Holds your API key if you saved one, so do not share it. |
+
+## What changed in 3.7.0
+
+- Separate **Edit a prompt** workflow for targeted text changes, with original text and change request in separate fields.
+- Instructions preserve unrelated wording and syntax and handle dependent references, makeup removal and gender changes without unrelated scene invention.
+- Streaming, complete-result copy/save, optional reuse for a follow-up edit, and independent saved form state.
+- Retained images and scene/profile rules do not enter text editing. Incomplete model replies are rejected before saving.
 
 ## What changed in 3.6.0
 
