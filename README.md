@@ -2,6 +2,11 @@
 
 <img src="web/app-icon.png" alt="Scene Director icon" width="96" height="96">
 
+<p align="center">
+  <a href="https://github.com/cyberdeliaAI/Scene-Director/actions/workflows/tests.yml"><img src="https://img.shields.io/github/actions/workflow/status/cyberdeliaAI/Scene-Director/tests.yml?branch=main&amp;label=Tests&amp;logo=github" alt="Tests"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-2e7d4f" alt="MIT license"></a>
+</p>
+
 Give a direction. Get distinct, surprising image prompts for **Krea 2** and **Z-Image Turbo**.
 
 Scene Director asks a local language model to invent the scenes for you. You set a subject and a direction like `jobs` or `sport`. The model picks different moments, places, clothing, framing and light for every prompt, within the limits you set. Prompts are always English, even when your brief is Dutch.
