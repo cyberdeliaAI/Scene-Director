@@ -26,7 +26,7 @@ from datetime import datetime
 from pathlib import Path
 
 APP_NAME = "Scene Director"
-VERSION = "3.7.0"
+VERSION = "3.9.0"
 
 
 def _env(name, default=""):
@@ -56,6 +56,19 @@ EXTRA_PARAMS = {
     "chat_template_kwargs": {"enable_thinking": False},
 }
 SAMPLING_DEFAULTS = {"temperature": TEMPERATURE, "top_p": TOP_P, **EXTRA_PARAMS}
+# Faithful workflows (image changes, rewrites, edits, captions) use calmer sampling by default.
+PRECISE_DEFAULTS = {"temperature": 0.3, "top_p": 0.9, "top_k": 20, "presence_penalty": 0.0,
+                    "reasoning_effort": "none", "chat_template_kwargs": {"enable_thinking": False}}
+PRECISE_WORKFLOWS = ("change_image", "rewrite", "dataset_caption", "edit_prompt")
+# Retry without optional controls only when the error is plausibly about one of them.
+OPTIONAL_REJECTED_RE = re.compile(r"top_k|presence_penalty|reasoning|chat_template|enable_thinking|unsupported|"
+                                  r"unrecognized|unknown|not (?:allowed|permitted|supported)|extra (?:fields|inputs)", re.I)
+MAX_SEED_SCENES = 300
+STOPWORDS = frozenset("""with that this their there these those from into onto over under while where which when
+what have has been being they them then than very each some other about above below between through across along
+around behind beside near toward towards against upon within without also just only both such more most much many
+your yours its it's her hers his him she he who whom whose would could should will shall might must does did done
+make makes made like near next still even ever every image scene shows showing""".split())
 REASONING_EFFORTS = ("none", "minimal", "low", "medium", "high", "xhigh", "max")
 BATCH_SIZE = 5
 MAX_STALLED_REPLIES = 3
@@ -266,6 +279,10 @@ class Brief:
     rewrite_system: str = field(default="", repr=False)
     rewrite_use_vision: bool = False
     caption_trigger: str = ""
+    caption_traits: str = ""
+    output_prefix: str = ""
+    seed_scenes: list = field(default_factory=list)
+    save_output: bool = True
 
     @property
     def scene_mode(self):
@@ -280,6 +297,33 @@ class Brief:
         if self.workflow == "change_image":
             return "source image"
         return f"{self.subject} + {self.second_subject}" if self.second_subject else self.subject
+
+
+ROTATION_RULES = """ROTATING CHOICES
+per_prompt_choices holds one object per requested prompt, in order. Prompt i must follow
+per_prompt_choices[i] exactly, together with every fixed parameter. Vary everything else as usual."""
+
+
+def split_choice(value):
+    """"close-up | medium | full body" rotates; a single value is a fixed choice."""
+    return [part.strip() for part in str(value).split("|") if part.strip()]
+
+
+def fixed_parameters(parameters):
+    return {name: value for name, value in parameters.items() if len(split_choice(value)) < 2}
+
+
+def rotating_parameters(parameters):
+    return {name: split_choice(value) for name, value in parameters.items() if len(split_choice(value)) >= 2}
+
+
+def per_prompt_choices(parameters, count, offset=0):
+    """Spread rotating values evenly over the run, continuing where the previous batch stopped."""
+    rotating = rotating_parameters(parameters)
+    if not rotating:
+        return []
+    return [{name: options[(offset + index) % len(options)] for name, options in rotating.items()}
+            for index in range(count)]
 
 
 def system_prompt(target, scene_mode="single", theme=None):
@@ -302,12 +346,14 @@ def brief_system_prompt(brief):
     if brief.workflow == "change_image":
         return CHANGE_IMAGE_PROMPT + "\n\n" + EDIT_OUTPUTS[brief.edit_output]
     prompt = system_prompt(brief.target, brief.scene_mode, brief.theme)
+    if rotating_parameters(brief.parameters):
+        prompt += "\n\n" + ROTATION_RULES
     if brief.reference:
         prompt += "\n\n" + REFERENCE_RULES + "\n" + REFERENCE_MODES[brief.reference.mode]
     return prompt
 
 
-def build_user_message(brief, count, previous_scenes, feedback=None):
+def build_user_message(brief, count, previous_scenes, feedback=None, offset=0):
     if brief.workflow == "edit_prompt":
         return json.dumps({"original_prompt": brief.source_prompt,
                            "requested_changes": brief.changes}, ensure_ascii=False, indent=2)
@@ -328,7 +374,7 @@ def build_user_message(brief, count, previous_scenes, feedback=None):
         "direction": brief.direction,
         "style": brief.style,
         "creativity": brief.creativity,
-        "parameters": brief.parameters,
+        "parameters": fixed_parameters(brief.parameters),
         "avoid": brief.avoid,
         "additional_wishes": brief.wishes,
         "requested_count": count,
@@ -336,6 +382,13 @@ def build_user_message(brief, count, previous_scenes, feedback=None):
         "corrections_from_last_batch": feedback or [],
         "task": "Invent distinct scenes within this brief. Choose all unspecified details yourself.",
     }
+    previous = list(previous_scenes)
+    if len(previous) > 30:
+        # Older scenes as short topics, so long runs keep avoiding them in a small context.
+        data["earlier_scene_topics"] = [" ".join(note.split()[:8]) for note in previous[:-30]][-150:]
+    choices = per_prompt_choices(brief.parameters, count, offset)
+    if choices:
+        data["per_prompt_choices"] = choices
     if brief.second_subject:
         del data["subject"]
         del data["identity_mode"]
@@ -408,9 +461,9 @@ def reference_from_file(path, mode="inspiration", notes=""):
                                "mode": mode, "notes": notes})
 
 
-def validate_sampling(value=None, base=None):
+def validate_sampling(value=None, base=None, defaults=None):
     """Only these sampling/reasoning fields can be configured, at every boundary."""
-    result = json.loads(json.dumps(SAMPLING_DEFAULTS if base is None else base))
+    result = json.loads(json.dumps((defaults or SAMPLING_DEFAULTS) if base is None else base))
     if value is None:
         value = {}
     if not isinstance(value, dict):
@@ -447,12 +500,18 @@ def validate_sampling(value=None, base=None):
     return result
 
 
-def saved_sampling(path=None):
+def sampling_profile(workflow):
+    """Scenes use the creative profile; targeted and faithful workflows use the precise one."""
+    return "precise" if workflow in PRECISE_WORKFLOWS else "creative"
+
+
+def saved_sampling(path=None, profile="creative"):
     try:
         data = json.loads(Path(path or SETTINGS_FILE).read_text(encoding="utf-8"))
     except (OSError, ValueError):
         data = {}
-    return validate_sampling(data.get("sampling") if isinstance(data, dict) else None)
+    key, defaults = ("sampling_precise", PRECISE_DEFAULTS) if profile == "precise" else ("sampling", SAMPLING_DEFAULTS)
+    return validate_sampling(data.get(key) if isinstance(data, dict) else None, defaults=defaults)
 
 
 class ApiError(GenerationError):
@@ -468,6 +527,10 @@ class ApiError(GenerationError):
 
 class ThinkingError(GenerationError):
     """The model spent its token budget on reasoning and wrote no answer."""
+
+
+class Cancelled(GenerationError):
+    """A caption or locate request was stopped by the user."""
 
 
 THINKING_HELP = (
@@ -683,8 +746,9 @@ class Client:
                 self.notify("The server requested plain base64 image data. Retrying with that image format.")
                 self.image_encoding = "base64"
                 return self.chat(system, user_message, max_tokens, on_delta, reference_image)
-            if self.use_extras and exc.code in (400, 422):
-                self.notify("The server rejected the optional sampling settings. Retrying without them.")
+            if self.use_extras and exc.code in (400, 422) and OPTIONAL_REJECTED_RE.search(str(exc)):
+                self.notify("The server rejected an optional sampling or reasoning setting. Retrying without them; "
+                            "the model may now think before answering.")
                 self.use_extras = False
                 return self.chat(system, user_message, max_tokens, on_delta, reference_image)
             if reference_image and exc.code in (400, 415, 422, 500, 501):
@@ -909,6 +973,38 @@ def nonvisual_sentences(prompt):
     return [sentence for sentence in SENTENCE_RE.split(prompt) if NONVISUAL_RE.search(sentence)]
 
 
+def content_words(text):
+    return {word for word in re.findall(r"[a-z]{4,}", (text or "").casefold()) if word not in STOPWORDS}
+
+
+def _overlap(first, second):
+    union = len(first | second)
+    return len(first & second) / union if union else 0.0
+
+
+def near_duplicate(idea, prompt, accepted):
+    """True when a draft repeats an accepted scene with only small wording changes.
+    With scene ideas, both the idea and the prompt must overlap; without them only
+    an almost identical prompt counts."""
+    words, idea_words = content_words(prompt), content_words(idea)
+    for other_words, other_idea in accepted:
+        both_ideas = bool(idea_words and other_idea)
+        if _overlap(words, other_words) < (0.6 if both_ideas else 0.97):
+            continue
+        if both_ideas and _overlap(idea_words, other_idea) < 0.5:
+            continue
+        return True
+    return False
+
+
+def with_prefix(prefix, prompt):
+    """A trigger or fixed opening for every saved prompt, such as "my_lora, "."""
+    prefix = (prefix or "").strip()
+    if not prefix:
+        return prompt
+    return prefix + (" " if prefix[-1] in ",;:." else ", ") + prompt
+
+
 def scene_note(idea, prompt):
     """A short memory line for one accepted scene, sent back to avoid repeats."""
     if idea:
@@ -944,6 +1040,123 @@ def output_path(brief, output_dir):
     return Path(output_dir) / f"{brief.target}_{subject_slug}_{slug(brief.direction)}_{stamp}.txt"
 
 
+def request_record(brief, count):
+    """The brief in request-field form, without image data or keys, for reuse from History."""
+    record = {"workflow": brief.workflow, "target": brief.target, "count": count}
+    if brief.workflow == "scenes":
+        record.update(subject=brief.subject, identity=brief.identity_mode, subject2=brief.second_subject,
+                      identity2=brief.second_identity_mode, interaction=brief.interaction, direction=brief.direction,
+                      creativity=brief.creativity, style=brief.style, wishes=brief.wishes, avoid=list(brief.avoid),
+                      parameters=dict(brief.parameters), output_prefix=brief.output_prefix)
+    elif brief.workflow == "change_image":
+        record.update(changes=brief.changes, edit_output=brief.edit_output, preserve=brief.preserve)
+    elif brief.workflow == "edit_prompt":
+        record.update(source_prompt=brief.source_prompt, changes=brief.changes)
+    elif brief.workflow == "rewrite":
+        record.update(rewrite_prompt=brief.rewrite_prompt, rewrite_system=brief.rewrite_system,
+                      rewrite_use_vision=brief.rewrite_use_vision)
+    if brief.reference:
+        record["reference"] = {"mode": brief.reference.mode, "notes": brief.reference.notes, "image": "not stored"}
+    return record
+
+
+def save_record(out, brief, count, model, sampling, created, ideas, prompts):
+    """Write the run's brief, model and settings next to its .txt file. Best effort."""
+    path = Path(out).with_suffix(".json")
+    data = {"app": APP_NAME, "version": VERSION, "created": created, "model": model, "sampling": sampling,
+            "request": request_record(brief, count), "count": len(prompts), "ideas": list(ideas)}
+    temporary = path.with_name(path.name + ".tmp")
+    temporary.write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    temporary.replace(path)
+
+
+def caption_system(brief):
+    system = re.sub(r"\{TRIGGER\}", lambda _: brief.caption_trigger, brief.rewrite_system, flags=re.I)
+    system = re.sub(r"\{CONSTANT_TRAITS\}", lambda _: brief.caption_traits or "none", system, flags=re.I)
+    if brief.caption_trigger:
+        system += "\n\nBegin the caption with this exact trigger token: " + brief.caption_trigger
+    else:
+        system += "\n\nNo trigger token was supplied. Do not invent a trigger token."
+    if brief.caption_traits:
+        system += ("\n\nCONSTANT TRAITS\nThese traits are the same in every image of this dataset and belong to the "
+                   "trigger token. Never mention them or describe them in other words: " + brief.caption_traits)
+    return system
+
+
+def apply_trigger(trigger, text):
+    if not trigger:
+        return text
+    prefix = re.compile(r"^" + re.escape(trigger) + r"(?=$|[\s,.:;!?])", re.I)
+    remainder = text
+    while prefix.match(remainder):
+        remainder = prefix.sub("", remainder, count=1).lstrip(" ,.:;!?")
+    return trigger + (", " + remainder if remainder else "")
+
+
+def tidy_reply(text):
+    text = strip_reasoning(text)
+    return re.sub(r"^```[^\n]*\n([\s\S]*?)\n?```\s*$", r"\1", text).strip()
+
+
+def caption_image(brief, client, cancel=None):
+    """One dataset caption for the web service's parallel caption requests. Streams so Stop is immediate."""
+    def watch(_channel, _text):
+        if cancel is not None and cancel.is_set():
+            raise Cancelled("Captioning stopped.")
+    watch(None, None)
+    result = " ".join(tidy_reply(client.chat(caption_system(brief), build_user_message(brief, 1, []),
+                                             4096, watch, brief.reference)).split())
+    if not result:
+        raise GenerationError("The model returned no caption. Try again or choose different instructions.")
+    return apply_trigger(brief.caption_trigger, result)
+
+
+LOCATE_SYSTEM = """You locate one region in an image so it can be cropped. The image may have plain gray
+borders; ignore them. Return only one JSON object: {"box": [x1, y1, x2, y2]} with integer coordinates
+from 0 to 1000, relative to the full image width and height, origin at the top left. The box tightly
+contains the requested region. If several candidates match, choose the most prominent one. If the region
+is not visible, return {"box": null}. No other text."""
+LOCATE_TARGETS = {
+    "face": "the face of the main person",
+    "head": "the head and shoulders of the main person, including all hair",
+    "upper_body": "the upper body of the main person, from the top of the head to the waist",
+    "person": "the whole main person, from the top of the hair to the feet",
+    "subject": "the main subject of the image",
+}
+
+
+def parse_box(text):
+    """Accept {"box": [...]}, Qwen-style [{"bbox_2d": [...]}] or four bare numbers. Returns 0-1000 coordinates."""
+    text = tidy_reply(text)
+    value = _load_json(text)
+    if isinstance(value, list) and value and isinstance(value[0], dict):
+        value = value[0]
+    if isinstance(value, dict):
+        if "box" in value and value["box"] is None:
+            return None
+        value = next((value[key] for key in ("box", "bbox_2d", "bbox") if key in value), None)
+    if not (isinstance(value, list) and len(value) == 4 and all(isinstance(n, (int, float)) and not isinstance(n, bool) for n in value)):
+        numbers = re.findall(r"-?\d+(?:\.\d+)?", text)
+        if len(numbers) < 4:
+            return None
+        value = [float(n) for n in numbers[:4]]
+    numbers = [float(n) for n in value]
+    if max(abs(n) for n in numbers) <= 1.5:
+        numbers = [n * 1000 for n in numbers]
+    x1, x2 = sorted((min(1000.0, max(0.0, numbers[0])), min(1000.0, max(0.0, numbers[2]))))
+    y1, y2 = sorted((min(1000.0, max(0.0, numbers[1])), min(1000.0, max(0.0, numbers[3]))))
+    if x2 - x1 < 5 or y2 - y1 < 5:
+        return None
+    return [round(x1), round(y1), round(x2), round(y2)]
+
+
+def locate_region(client, image, target, cancel=None):
+    if cancel is not None and cancel.is_set():
+        raise Cancelled("Auto crop stopped.")
+    reply_text = client.chat(LOCATE_SYSTEM, "Locate: " + LOCATE_TARGETS.get(target, target), 1024, None, image)
+    return parse_box(reply_text)
+
+
 def run_rewrite(brief, count, client, emit, output_dir, live):
     """One text transformation, without the scene generator's output filters."""
     out = None
@@ -961,23 +1174,18 @@ def run_rewrite(brief, count, client, emit, output_dir, live):
             raise GenerationError("Paste the prompt you want to rewrite.")
         image = brief.reference if not editing and brief.rewrite_use_vision else None
         model = client.pick_model(require_vision=image is not None)
-        if not captioning:
+        if not captioning and brief.save_output:
             output_dir = Path(output_dir).expanduser()
             output_dir.mkdir(parents=True, exist_ok=True)
             out = output_path(brief, output_dir)
+        created = datetime.now().isoformat(timespec="seconds")
         emit({"type": "start", "model": model, "count": 1, "file": str(out) if out else None,
               "target_label": "targeted changes" if editing else "custom instructions", "subject": "prompt", "direction": "edit" if editing else "rewrite", "creativity": "targeted" if editing else "preset",
               "workflow": brief.workflow, "output_kind": "edited_prompt" if editing else "dataset_caption" if captioning else "rewritten_prompt"})
         emit({"type": "batch", "first": 1, "last": 1, "attempt": 1, "live": live})
         buffer = DeltaBuffer(emit) if live else None
         try:
-            system = brief_system_prompt(brief)
-            if captioning:
-                system = re.sub(r"\{TRIGGER\}", lambda _: brief.caption_trigger, system, flags=re.I)
-                if brief.caption_trigger:
-                    system += "\n\nBegin the caption with this exact trigger token: " + brief.caption_trigger
-                else:
-                    system += "\n\nNo trigger token was supplied. Do not invent a trigger token."
+            system = caption_system(brief) if captioning else brief_system_prompt(brief)
             token_budget = max(4096, min(16384, len(brief.source_prompt.encode("utf-8")) // 2 + 1024)) if editing else 4096
             result = client.chat(system, build_user_message(brief, 1, []),
                                  token_budget, buffer, image)
@@ -992,14 +1200,14 @@ def run_rewrite(brief, count, client, emit, output_dir, live):
             result = " ".join(result.split())
         if not result:
             raise GenerationError("The model returned no edited prompt. Try again or clarify the changes." if editing else "The model returned no rewritten prompt. Try again or choose different instructions.")
-        if captioning and brief.caption_trigger:
-            prefix = re.compile(r"^" + re.escape(brief.caption_trigger) + r"(?=$|[\s,.:;!?])", re.I)
-            remainder = result
-            while prefix.match(remainder):
-                remainder = prefix.sub("", remainder, count=1).lstrip(" ,.:;!?")
-            result = brief.caption_trigger + (", " + remainder if remainder else "")
+        if captioning:
+            result = apply_trigger(brief.caption_trigger, result)
         if out:
             save_prompts(out, [result])
+            try:
+                save_record(out, brief, 1, model, client.sampling, created, [""], [result])
+            except OSError:
+                emit({"type": "notice", "level": "info", "message": "The run details could not be saved next to the prompt file."})
         emit({"type": "prompt", "index": 1, "idea": "Edited prompt" if editing else "Training caption" if captioning else "Rewritten prompt", "text": result, "words": len(result.split())})
         if out:
             emit({"type": "saved", "file": str(out), "count": 1})
@@ -1021,20 +1229,23 @@ def run(brief, count, client, emit, batch_size=BATCH_SIZE, output_dir=OUTPUT_DIR
     """
     if brief.workflow in ("rewrite", "dataset_caption", "edit_prompt"):
         return run_rewrite(brief, count, client, emit, output_dir, live)
-    prompts, notes, seen, feedback = [], [], set(), []
+    prompts, notes, seen, feedback = [], list(brief.seed_scenes)[-MAX_SEED_SCENES:], set(), []
+    ideas_out, accepted = [], []
     out, saved = None, 0
     client.notify = lambda message: emit({"type": "notice", "level": "info", "message": message})
     try:
         if brief.workflow == "change_image" and (not brief.reference or not brief.changes.strip() or count != 1):
             raise GenerationError("Change an image requires one source image, requested changes and a count of 1.")
         model = client.pick_model(require_vision=brief.reference is not None)
-        output_dir = Path(output_dir).expanduser()
-        output_dir.mkdir(parents=True, exist_ok=True)
-        out = output_path(brief, output_dir)
+        created = datetime.now().isoformat(timespec="seconds")
+        if brief.save_output:
+            output_dir = Path(output_dir).expanduser()
+            output_dir.mkdir(parents=True, exist_ok=True)
+            out = output_path(brief, output_dir)
         emit({"type": "start", "model": model, "target": brief.target,
               "target_label": TARGET_LABELS.get(brief.target, brief.target),
               "subject": brief.subject_label, "direction": brief.direction,
-              "creativity": brief.creativity, "count": count, "file": str(out),
+              "creativity": brief.creativity, "count": count, "file": str(out) if out else None,
               "workflow": brief.workflow, "output_kind": brief.edit_output})
         system = brief_system_prompt(brief)
         stalled = 0
@@ -1044,7 +1255,7 @@ def run(brief, count, client, emit, batch_size=BATCH_SIZE, output_dir=OUTPUT_DIR
                   "attempt": stalled + 1, "live": live})
             buffer = DeltaBuffer(emit) if live else None
             try:
-                reply = client.chat(system, build_user_message(brief, n, notes, feedback),
+                reply = client.chat(system, build_user_message(brief, n, notes, feedback, offset=len(prompts)),
                                     max_tokens_for(n, brief.scene_mode), buffer, brief.reference)
             finally:
                 if buffer:
@@ -1070,20 +1281,33 @@ def run(brief, count, client, emit, batch_size=BATCH_SIZE, output_dir=OUTPUT_DIR
                 key = fingerprint(prompt)
                 if key in seen:
                     continue
+                if brief.workflow == "scenes" and near_duplicate(idea, prompt, accepted):
+                    feedback.append("A draft nearly repeated an earlier scene. Choose a clearly different moment, place and composition.")
+                    emit({"type": "notice", "level": "warn",
+                          "message": "Replaced a draft that nearly repeated an earlier scene."})
+                    continue
                 seen.add(key)
-                prompts.append(prompt)
+                accepted.append((content_words(prompt), content_words(idea)))
+                text = with_prefix(brief.output_prefix, prompt) if brief.workflow == "scenes" else prompt
+                prompts.append(text)
+                ideas_out.append(idea or "")
                 notes.append(scene_note(idea, prompt))
                 added += 1
-                emit({"type": "prompt", "index": len(prompts), "idea": idea, "text": prompt,
-                      "words": len(prompt.split())})
+                emit({"type": "prompt", "index": len(prompts), "idea": idea, "text": text,
+                      "words": len(text.split())})
                 if added == n:
                     break
             feedback = sorted(set(feedback))
             if added:
                 # Save after each batch so an interrupted run keeps its results.
-                save_prompts(out, prompts)
-                saved = len(prompts)
-                emit({"type": "saved", "file": str(out), "count": saved})
+                if out:
+                    save_prompts(out, prompts)
+                    saved = len(prompts)
+                    try:
+                        save_record(out, brief, count, model, client.sampling, created, ideas_out, prompts)
+                    except OSError:
+                        emit({"type": "notice", "level": "info", "message": "The run details could not be saved next to the prompt file."})
+                    emit({"type": "saved", "file": str(out), "count": saved})
                 stalled = 0
             else:
                 stalled += 1
@@ -1099,7 +1323,7 @@ def run(brief, count, client, emit, batch_size=BATCH_SIZE, output_dir=OUTPUT_DIR
     except KeyboardInterrupt:
         emit({"type": "stopped", "file": str(out) if saved else None, "saved": saved})
         return 130
-    emit({"type": "done", "file": str(out), "count": len(prompts)})
+    emit({"type": "done", "file": str(out) if out else None, "count": len(prompts)})
     return 0
 
 
@@ -1188,7 +1412,8 @@ def request_from_json(data):
                "direction", "style", "parameters", "wishes", "subject2", "interaction",
                "api_url", "api_key", "model", "output_dir", "batch_size", "timeout", "live", "sampling", "reference_image",
                "workflow", "changes", "edit_output", "preserve", "source_prompt",
-               "rewrite_prompt", "rewrite_system", "rewrite_use_vision", "caption_trigger"}
+               "rewrite_prompt", "rewrite_system", "rewrite_use_vision", "caption_trigger", "caption_traits",
+               "output_prefix", "previous_scenes", "save_output"}
     if set(data) - allowed:
         raise GenerationError("Unsupported request field: " + ", ".join(sorted(set(data) - allowed)))
 
@@ -1209,6 +1434,16 @@ def request_from_json(data):
         raise GenerationError("Custom system instructions are only available in Rewrite a prompt or LoRA Dataset.")
     if "caption_trigger" in data and (workflow != "dataset_caption" or not isinstance(data["caption_trigger"], str) or len(data["caption_trigger"]) > 200):
         raise GenerationError("caption_trigger is only available as text of at most 200 characters in LoRA Dataset.")
+    if "caption_traits" in data and (workflow != "dataset_caption" or not isinstance(data["caption_traits"], str) or len(data["caption_traits"]) > 1000):
+        raise GenerationError("caption_traits is only available as text of at most 1000 characters in LoRA Dataset.")
+    if "output_prefix" in data and (workflow != "scenes" or not isinstance(data["output_prefix"], str)
+                                    or len(data["output_prefix"]) > 200 or "\n" in data["output_prefix"]):
+        raise GenerationError("The prompt prefix is one line of at most 200 characters, for Generate scenes.")
+    seeds = data.get("previous_scenes", [])
+    if not isinstance(seeds, list) or len(seeds) > MAX_SEED_SCENES or not all(isinstance(s, str) and len(s) <= 300 for s in seeds):
+        raise GenerationError("previous_scenes must be a list of at most 300 short scene notes.")
+    if "save_output" in data and not isinstance(data["save_output"], bool):
+        raise GenerationError("save_output must be true or false.")
     use_vision = data.get("rewrite_use_vision", False)
     if not isinstance(use_vision, bool):
         raise GenerationError("rewrite_use_vision must be true or false.")
@@ -1268,6 +1503,10 @@ def request_from_json(data):
         source_prompt=text("source_prompt"),
         rewrite_prompt=text("rewrite_prompt"), rewrite_system=text("rewrite_system"), rewrite_use_vision=use_vision,
         caption_trigger=" ".join(text("caption_trigger").split()),
+        caption_traits=" ".join(text("caption_traits").split()),
+        output_prefix=" ".join(text("output_prefix").split()),
+        seed_scenes=[" ".join(s.split()) for s in seeds if s.strip()],
+        save_output=data.get("save_output", True) is not False,
     )
     if workflow == "change_image":
         brief.subject, brief.direction = "source image", "apply requested visual changes"
@@ -1358,7 +1597,7 @@ def run_request(path, emit, live=True):
         raw = sys.stdin.read() if path == "-" else Path(path).read_text(encoding="utf-8")
         data = json.loads(raw)
         brief, count, settings = request_from_json(data)
-        settings["sampling"] = validate_sampling(data.get("sampling"), base=saved_sampling())
+        settings["sampling"] = validate_sampling(data.get("sampling"), base=saved_sampling(profile=sampling_profile(brief.workflow)))
     except (OSError, ValueError, GenerationError) as exc:
         emit({"type": "error", "message": str(exc), "file": None, "saved": 0})
         return 2
@@ -1400,7 +1639,7 @@ def main(argv=None):
                 "count": args.count if args.count is not None else 1, "changes": args.changes,
                 "edit_output": args.edit_output, "preserve": args.preserve,
                 "reference_image": {"data_url": image.data_url}})
-            sampling = saved_sampling()
+            sampling = saved_sampling(profile="precise")
         except GenerationError as exc:
             parser.error(str(exc))
         if args.dry_run:

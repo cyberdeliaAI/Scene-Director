@@ -18,9 +18,23 @@
 .ds-workspace.drag-over { outline:2px dashed var(--accent); outline-offset:3px; }.ds-error { color:var(--err); min-height:1em; }
 .ds-caption-editor { margin:14px 0; }#dsCaptionText { min-height:150px; }
 .ds-queue { display:flex; gap:8px; overflow-x:auto; margin-top:16px; padding-bottom:8px; min-height:88px; }
-.ds-thumb { flex:0 0 84px; width:84px; background:var(--bg); border:2px solid transparent; border-radius:7px; padding:4px; color:var(--muted); }.ds-thumb[aria-current=true] { border-color:var(--accent); }.ds-thumb img { width:72px; height:60px; object-fit:contain; display:block; }.ds-thumb span { display:block; font-size:10px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; margin-top:3px; }.ds-thumb[data-state=ready] span { color:var(--ok); }.ds-thumb[data-state=stale] span { color:var(--accent); }
+.ds-thumb { flex:0 0 84px; width:84px; background:var(--bg); border:2px solid transparent; border-radius:7px; padding:4px; color:var(--muted); }.ds-thumb[aria-current=true] { border-color:var(--accent); }.ds-thumb img { width:72px; height:60px; object-fit:contain; display:block; }.ds-thumb span { display:block; font-size:10px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; margin-top:3px; }.ds-thumb[data-state=approved] span { color:var(--ok); }.ds-thumb[data-state=ready] span { color:var(--text); }.ds-thumb[data-state=stale] span { color:var(--accent); }.ds-thumb[data-state=failed] span,.ds-thumb[data-state=warn] span { color:var(--err); }
+.ds-thumb { position:relative; }.ds-thumb[data-problem=small],.ds-thumb[data-problem=error] { border-color:var(--err); }.ds-thumb[data-problem=size] { border-style:dashed; border-color:var(--err); }
+.ds-thumb[data-problem=small] img,.ds-thumb[data-problem=error] img { opacity:.5; }
+.ds-thumb[data-flag]:not([data-flag=""])::after { content:attr(data-flag); position:absolute; left:6px; right:6px; top:6px; padding:1px 2px; border-radius:4px; background:var(--err); color:#fff; font-size:9px; font-weight:700; line-height:1.4; text-align:center; pointer-events:none; }
+.ds-check { display:flex; gap:8px; align-items:center; margin-top:10px; font-size:13px; cursor:pointer; }.ds-check input { width:auto; margin:0; }
 .ds-summary { display:flex; gap:10px; justify-content:space-between; align-items:center; margin-top:10px; font-size:13px; color:var(--muted); }
 #dsScriptDetails { margin-top:16px; }#dsScriptDetails summary { font-size:13px; font-weight:650; cursor:pointer; }#dsSystem { font-size:12px; line-height:1.5; margin-top:8px; }
 .dataset button:disabled { cursor:default; opacity:.45; }
+.ds-inline { display:flex; gap:8px; margin-top:8px; }.ds-inline input { flex:1; min-width:0; }.ds-inline .btn { font-size:12px; padding:8px 10px; }
+.ds-details { margin-top:16px; }.ds-details summary { font-size:13px; font-weight:650; cursor:pointer; }
+.ds-zoom { font-size:12px; color:var(--muted); min-width:42px; text-align:center; font-variant-numeric:tabular-nums; }
+#dsGrid[aria-pressed=true] { border-color:var(--accent); color:var(--accent-text); }
+.ds-shortcuts { margin:-4px 0 10px; font-size:12px; color:var(--muted); }.ds-shortcuts summary { cursor:pointer; width:max-content; }
+.ds-keys { display:flex; flex-wrap:wrap; gap:6px 16px; margin-top:8px; }
+.ds-keys kbd { font:600 11px/1 var(--ui); padding:2px 5px; border:1px solid var(--line); border-radius:4px; background:var(--bg); color:var(--text); }
+.ds-queue-bar { display:flex; gap:8px; align-items:center; margin-top:14px; font-size:13px; color:var(--muted); }.ds-queue-bar select { width:auto; padding:5px 8px; font-size:13px; }
+.ds-queue .ds-thumb[hidden] { display:none; }
+@media(min-width:1001px) { .ds-sidebar { position:sticky; top:12px; max-height:calc(100vh - 24px); overflow-y:auto; overscroll-behavior:contain; } }
 @media(max-width:1000px) { .ds-layout { grid-template-columns:240px minmax(0,1fr); gap:14px; }.ds-preview { height:350px; }.ds-toolbar { font-size:12px; } }
 @media(max-width:720px) { .ds-layout { grid-template-columns:1fr; }.dataset,.tool-nav { padding-left:16px; padding-right:16px; }.ds-sidebar { order:2; }.ds-heading { align-items:flex-start; }.ds-preview { height:320px; }.ds-summary { align-items:flex-start; flex-direction:column; } }

@@ -59,7 +59,7 @@ class PromptEditTests(unittest.TestCase):
                         {"message": {"content": "A bare-faced woman, wearing"}, "finish_reason": "length"},
                         {"message": {"content": "Partial"}, "finish_reason": "content_filter"}]:
             with self.subTest(reason=message["finish_reason"]):
-                with FakeServer([], messages=[message]) as server:
+                with FakeServer([], messages=iter([message])) as server:
                     code, events, lines = collect(edit(), 1, server.url)
                 self.assertEqual(code, 1)
                 self.assertEqual(lines, [])
