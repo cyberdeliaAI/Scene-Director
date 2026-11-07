@@ -44,6 +44,7 @@ jobs:
           node desktop/node_modules/electron/install.js
       - name: Check source and interface
         run: |
+          python3 desktop/check_source_startup.py
           python3 -m unittest -q
           node --test desktop/*.test.cjs
       - name: Prepare backend without signing credentials
