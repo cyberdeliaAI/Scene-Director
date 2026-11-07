@@ -39,7 +39,7 @@ npm ci --prefix desktop --ignore-scripts
 node desktop/node_modules/electron/install.js
 npm run prepare:mac --prefix desktop
 npm run sign:mac --prefix desktop
-desktop/.venv/bin/python desktop/verify_mac.py --app "desktop/dist/3.9.0-beta.1/signed/mac-arm64/Scene Director.app"
+desktop/.venv/bin/python desktop/verify_mac.py --app "desktop/dist/3.9.0-beta.2/signed/mac-arm64/Scene Director.app"
 ```
 
 References: [Apple notarization](https://developer.apple.com/documentation/technotes/tn3147-migrating-to-the-latest-notarization-tool),

@@ -1,12 +1,12 @@
 # Scene Director for Apple Silicon — test build
 
-Version **3.9.0-beta.1**, based on Scene Director 3.9.0. A self-contained Electron app with the existing English interface and a bundled Python service. It writes prompts; image changes produce a revised prompt or edit instruction, not an edited image file.
+Version **3.9.0-beta.2**, based on Scene Director 3.9.0. A self-contained Electron app with the existing English interface and a bundled Python service. It writes prompts; image changes produce a revised prompt or edit instruction, not an edited image file.
 
 ## Install and use
 
-Download the standalone test bundle from the [private macOS test release](https://github.com/cyberdeliaAI/Scene-Director/releases/tag/v3.9.0-beta.1). This repository also includes the desktop source and build instructions.
+Download the standalone test bundle from the [private macOS test release](https://github.com/cyberdeliaAI/Scene-Director/releases/tag/v3.9.0-beta.2). This repository also includes the desktop source and build instructions.
 
-1. Extract `Scene_Director_3.9.0-beta.1_macOS_arm64.zip`.
+1. Extract `Scene_Director_3.9.0-beta.2_macOS_arm64.zip`.
 2. Drag **Scene Director.app** to Applications, or open it from the extracted folder.
 3. Open LM Studio, load a language model and start its local server. Use a vision-capable model for image uploads.
 4. Open Scene Director and click its connection status to set the server and model. All scene, two-subject, image-reference, image-change, prompt-rewrite and sampling controls are included.
@@ -59,7 +59,7 @@ npm ci
 npm run build:mac
 ```
 
-Output: `dist/3.9.0-beta.1/Scene Director-darwin-arm64/Scene Director.app`.
+Output: `dist/3.9.0-beta.2/Scene Director-darwin-arm64/Scene Director.app`.
 
 The custom app icon is in `assets/SceneDirector.icns`, with the original PNG and generation prompt alongside it. It was generated with built-in imagegen; macOS icon sizes were exported from that artwork. The web interface uses `../web/app-icon.png`.
 
@@ -70,7 +70,7 @@ Run the checks from the parent `Scene Director` folder:
 ```sh
 python3 -m unittest -q
 node --test desktop/*.test.cjs
-SCENE_DIRECTOR_TEST_BACKEND="$PWD/desktop/dist/3.9.0-beta.1/Scene Director-darwin-arm64/Scene Director.app/Contents/Resources/backend/scene-director-backend" python3 -m unittest test_desktop -q
+SCENE_DIRECTOR_TEST_BACKEND="$PWD/desktop/dist/3.9.0-beta.2/Scene Director-darwin-arm64/Scene Director.app/Contents/Resources/backend/scene-director-backend" python3 -m unittest test_desktop -q
 ```
 
 Desktop integration tests cover private-session access, bundled assets, both image-model profiles, vision input, saved settings, relaunch and shutdown during generation. They use temporary profiles and fake local model servers. Actual prompt quality and model compatibility depend on your selected model and were not evaluated using a live model for this build.
