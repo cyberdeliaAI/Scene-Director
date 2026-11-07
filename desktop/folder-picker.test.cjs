@@ -2,6 +2,7 @@
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
+const path = require('node:path');
 const { createPresetFolderPicker } = require('./folder-picker.cjs');
 
 function fixture(showOpenDialog = async () => ({ canceled: false, filePaths: ['/shared/presets'] })) {
@@ -69,7 +70,7 @@ test('home paths expand and empty paths start in Documents', async () => {
   const f = fixture();
   await f.choose(f.event, 'text', '~/presets');
   await f.choose(f.event, 'vision', '');
-  assert.equal(f.calls[0][1].defaultPath, '/Users/test/presets');
+  assert.equal(f.calls[0][1].defaultPath, path.join('/Users/test', 'presets'));
   assert.equal(f.calls[1][1].defaultPath, '/Users/test/Documents');
 });
 
