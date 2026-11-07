@@ -24,6 +24,7 @@ import webbrowser
 from datetime import datetime
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
+from socketserver import TCPServer
 from urllib.parse import parse_qs, urlparse
 
 import scene_director as engine
@@ -46,6 +47,14 @@ PROMPT_INPUTS = ("text", "prompt", "positive", "text_g", "text_l", "string", "va
 WORKFLOW_LABELS = {"change_image": "Change an image", "rewrite": "Rewrite a prompt", "edit_prompt": "Edit a prompt"}
 COMFY_DEFAULTS = {"comfy_url": "http://127.0.0.1:8188", "comfy_workflow": "", "comfy_node": "",
                   "comfy_input": "text", "comfy_seed": "random"}
+
+
+class LoopbackHTTPServer(ThreadingHTTPServer):
+    def server_bind(self):
+        # HTTPServer normally reverse-resolves its address. This private server
+        # only uses loopback; DNS must never delay its ready message or app launch.
+        TCPServer.server_bind(self)
+        self.server_name, self.server_port = self.server_address[:2]
 
 
 def comfy_error(raw):
@@ -862,7 +871,7 @@ def create_server(port=None, api_url=None, model=None, output_dir=None, settings
     last_error = None
     for candidate in candidates:
         try:
-            server = ThreadingHTTPServer(("127.0.0.1", candidate), handler)
+            server = LoopbackHTTPServer(("127.0.0.1", candidate), handler)
             break
         except OSError as exc:
             last_error = exc

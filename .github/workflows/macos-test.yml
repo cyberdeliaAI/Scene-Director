@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
   push:
     branches: [main, scene-director-3.9]
-    paths: ['.github/workflows/macos-test.yml', 'desktop/**', 'test_desktop.py']
+    paths: ['.github/workflows/macos-test.yml', 'desktop/**', '*.py', 'web/**']
 
 permissions:
   contents: read

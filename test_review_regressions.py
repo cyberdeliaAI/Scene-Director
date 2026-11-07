@@ -4,6 +4,7 @@ import tempfile
 import threading
 import time
 import unittest
+from unittest import mock
 from pathlib import Path
 
 import scene_director as engine
@@ -19,6 +20,16 @@ class HistoryRegressionTests(unittest.TestCase):
 
     def tearDown(self):
         self.folder.cleanup()
+
+    def test_local_service_startup_never_uses_reverse_dns(self):
+        with mock.patch('socket.getfqdn',side_effect=AssertionError('Unexpected DNS lookup')):
+            server,_app = web.create_server(port=0,settings_file=self.root/'settings.json',output_dir=self.root)
+            try:
+                self.assertEqual(server.server_name,'127.0.0.1')
+                self.assertEqual(server.server_address[0],'127.0.0.1')
+                self.assertGreater(server.server_port,0)
+            finally:
+                server.server_close()
 
     def test_generated_multiline_edit_survives_history_hand_edits_and_reopening(self):
         original = 'my_token, (woman:1.2)\n\n35mm,  soft light'
