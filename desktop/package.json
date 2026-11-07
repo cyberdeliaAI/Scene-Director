@@ -1,17 +1,25 @@
 {
   "name": "scene-director-desktop",
   "productName": "Scene Director",
-  "version": "3.7.0-beta.1",
-  "description": "Scene Director \u2014 Apple Silicon desktop test",
+  "version": "3.9.0",
+  "description": "Scene Director \u2014 prompts and LoRA dataset preparation",
   "author": "Scene Director",
   "private": true,
   "main": "main.cjs",
   "scripts": {
     "start": "electron .",
-    "build:mac": "node build-mac.cjs"
+    "build:mac": "node build-mac.cjs",
+    "prepare:mac": "node build-native.cjs --prepare",
+    "sign:mac": "node sign-mac.cjs",
+    "build:native": "node build-native.cjs",
+    "prepare:native": "node build-native.cjs --prepare"
   },
   "devDependencies": {
     "@electron/packager": "20.3.0",
-    "electron": "45.2.3"
+    "electron": "45.2.3",
+    "electron-builder": "26.18.0"
+  },
+  "overrides": {
+    "minimatch@>=7.0.0 <11.0.1": "11.0.1"
   }
 }

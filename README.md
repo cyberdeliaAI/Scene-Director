@@ -2,13 +2,26 @@
 
 <img src="web/app-icon.png" alt="Scene Director icon" width="96" height="96">
 
+<p align="center">
+  <a href="https://github.com/cyberdeliaAI/Scene-Director/actions/workflows/tests.yml"><img src="https://img.shields.io/github/actions/workflow/status/cyberdeliaAI/Scene-Director/tests.yml?branch=main&amp;label=Tests&amp;logo=github" alt="Tests"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-2e7d4f" alt="MIT license"></a>
+</p>
+
 Give a direction. Get distinct, surprising image prompts for **Krea 2** and **Z-Image Turbo**.
 
 Scene Director asks a local language model to invent the scenes for you. You set a subject and a direction like `jobs` or `sport`. The model picks different moments, places, clothing, framing and light for every prompt, within the limits you set. Prompts are always English, even when your brief is Dutch.
 
-Version 3.7.0. Python 3.9 or newer. No packages to install.
+Version 3.9.0. Python 3.9 or newer. No packages to install.
 
-An experimental **Electron app for Apple Silicon** is available, version 3.7.0-beta.1. [Download the macOS test app](https://github.com/cyberdeliaAI/Scene-Director/releases/tag/v3.7.0-beta.1) from this private repository's Releases page. It includes Python and opens in its own Mac window. Apple Silicon and macOS 13 or newer are required. See [desktop/README.md](desktop/README.md) for installation, storage locations and build instructions. Source is included here; compiled apps are attached to releases. The browser launchers continue to work as before.
+Standalone desktop downloads are available for **macOS Apple Silicon**, **macOS Intel**, **Windows x64** and **Linux x64**. [Download Scene Director 3.9.0](https://github.com/cyberdeliaAI/Scene-Director/releases/tag/v3.9.0). Python is included; no Python or Node.js installation is required. Both Mac apps are Developer ID signed and Apple-notarized. Windows and Linux downloads are portable archives. See [desktop/README.md](desktop/README.md) for installation, system requirements and build instructions. The browser launchers remain available.
+
+On macOS, Homebrew selects the matching Intel or Apple Silicon download:
+
+```sh
+brew install --cask cyberdeliaAI/apps/scene-director
+```
+
+Quit the app before upgrading. Settings, saved prompts and dataset sessions are stored outside the app and are preserved when it is replaced.
 
 ## Quick start with LM Studio
 
@@ -41,10 +54,26 @@ Some models think before they answer. Scene Director asks the server to switch t
 | Visual style | Optional. Blank lets the model choose, leaning to believable photography for everyday subjects. |
 | Extra wishes | Optional. Plain language that applies to every prompt. |
 | Never show | Optional. Things that must not appear. |
-| Fixed choices | Optional. Lock one aspect for every prompt, like `setting = indoors` or `framing = full body`. |
+| Fixed choices | Optional. Lock one aspect for every prompt, like `setting = indoors`. Separate values with `\|` to rotate them evenly over the run: `framing = close-up \| medium \| full body`. |
+| Prefix every prompt | Optional. Added to the start of every saved prompt, such as your LoRA trigger. The model never writes it. |
+| Saved briefs | Save every field of the current workflow under a name and load it again later. Reference images are not stored. |
 | Reference image | Optional. Upload a PNG, JPEG or WebP image to guide a vision-capable language model. |
 
 You watch the model work live. First the scene ideas for the next batch appear as headings, then each prompt types itself out underneath. If the model thinks first, its thinking shows up too, with a timer that tells you how long the batch is taking. Once a batch is checked, the drafts turn into final prompts. Copy one, copy them all, or open the output folder. Ctrl+Enter (Cmd+Enter on a Mac) starts a run.
+
+## Working with the results
+
+Each prompt has **Copy**, **☆ Star** and, once ComfyUI is set up, **Queue in ComfyUI**. Under **More**, **Edit text** changes it by hand, **New version** writes a different scene for that slot with the same brief, **Use in Edit a prompt** opens it for a targeted edit and **Delete** removes it. Changes are saved to the run's file. Starred prompts are collected in `favorites.txt` in the output folder.
+
+**History** lists the prompt files in the output folder. **Open** shows a run with the same actions. **Use brief** fills the form with the brief that produced it. **Open starred prompts** shows your favorites. Every run writes a `.json` file next to its `.txt` with the brief, model and generation settings. Reference images are never stored.
+
+History and hand edits preserve complete multiline prompts. Run records also keep each prompt's selected rotating choices, so **New version** retains those choices after deletion or reopening a run. Legacy single-result edit files are read as one complete prompt.
+
+Long runs remember all earlier scenes as short topics, and drafts that nearly repeat an earlier scene are replaced, so runs of 100 prompts or more stay varied.
+
+## Send prompts to ComfyUI
+
+In **Settings → ComfyUI**, enter the ComfyUI address (`http://127.0.0.1:8188` by default) and choose a workflow saved with **Export (API)** in ComfyUI. **Detect** lists the text inputs in that workflow; choose the positive prompt. Each queued prompt replaces that input. Seed inputs get a new random value per prompt unless you choose to keep the workflow's seed. **Queue all in ComfyUI** sends the whole run. ComfyUI must be running. Scene Director only queues the prompts; the images appear in ComfyUI.
 
 ## How the prompts are written
 
@@ -66,18 +95,21 @@ Scene Director also checks every draft. Drafts that describe a LoRA character's 
 
 Use the **LoRA Dataset** tool tab for training-dataset preparation. It has its own image queue, crop edits, scripts and captions; nothing is automatically sent to Prompt Studio or Rewrite a prompt. It does not train a LoRA.
 
-1. **Add images** or drop multiple PNG, JPEG or WebP files onto the preview.
-2. In **Prepare images**, draw a crop, move it, resize its corner handles, select a ratio, rotate or flip. **Undo** restores edits. Arrow keys move a focused crop by one source pixel; Shift moves ten pixels. Crop coordinates use image pixels independently of preview scale.
-3. Choose an export size and format. Maximum side never enlarges the crop. Optional minimum width/height or longest-side constraints block captioning/export when not met. **1024 square** sets a 1:1 crop, 1024-pixel maximum and 1024 × 1024 minimum; sources must be large enough.
-4. Open **Caption images**. Choose Character LoRA, General image caption, Style LoRA, a shared Vision script, or custom instructions. Optionally set a trigger token and extra caption instructions. **Caption this image** replaces that image's caption; **Caption pending** handles missing captions and preparation changes, one image at a time. **Stop batch** stops the current model worker and prevents further images from starting.
-5. Review and edit each caption. Preparation changes keep its existing text but mark it for review. Edit it, regenerate it or explicitly choose **Mark reviewed for this crop**. New manual edits made during generation are protected from older model replies.
-6. **Export images + captions** creates one ZIP with prepared images and matching UTF-8 `.txt` files. Every queued image must have a reviewed, nonempty caption. Remove images you do not want. Duplicate stems and unsafe filename characters are handled so each image keeps its matching caption. The export uses the caption text present when export starts.
+1. **Add images**, **Add folder** or drop PNG, JPEG or WebP files onto the preview. A `.txt` file with the same name is imported as that image's caption, for review. Duplicates (same name, size and date) are skipped.
+2. In **Prepare images**, draw a crop, move it, resize its corner handles, select a ratio, rotate or flip. **Undo** restores edits. Arrow keys move a focused crop by one source pixel; Shift moves ten pixels. Crop coordinates use image pixels independently of preview scale. With **Same ratio for all images** on (the default), a ratio change adjusts every existing crop around its own center. You confirm first when other crops change. Turn it off to give each image its own ratio; the dropdown then follows the selected image. Corner and edge handles resize the crop. Scroll to zoom and hold Space or Alt while dragging to pan. **Grid**, **Fit** and the keyboard shortcuts (A/F, L/R, H/V, G, 0, Ctrl/Cmd+Z, Esc, ?) are listed under **Shortcuts**. Add your own ratio, such as `7:9`, below the ratio list.
+3. Choose an export size and format. **Longest side** limits the longest exported side. **Pixel area** scales to a total pixel count like training buckets: 1024 means about 1024 × 1024 pixels, so a 2:3 crop exports at 832 × 1216 when rounding to 64. **Round to a multiple of** 8 to 64 px trims a few edge pixels instead of distorting the image. Exports never enlarge a crop.
+   The **Minimum size** can be width × height, longest side, shortest side or pixel area. Crops cannot be drawn or resized below it; near an edge the crop moves inward instead. Changing the minimum grows existing crops around their center where the image allows it. Images that cannot reach the minimum are marked **Too small** in the queue, skipped by Caption pending and left out of the export after a confirmation. **Remove too small** clears them from the dataset. A pixel-area minimum is checked before rounding, so 832 × 1216 still counts as a 1024 bucket.
+   **1024 square** sets 1:1 crops, a 1024 longest side and a 1024 × 1024 minimum. **1024 buckets** sets free crops, a 1024 pixel area, rounding to 64 and a 1024 pixel-area minimum. Sources must be large enough for either preset.
+   **Auto crop with the vision model** (experimental) asks the vision model where the face, head and shoulders, upper body, full person or main subject is. It then sets a crop with your padding, ratio and minimum, for one image or all images. Check the results; each crop can be undone.
+4. Open **Caption images**. Choose a built-in script (Krea 2 Character LoRA, Krea 2 Style LoRA, Z-Image LoRA training, Character LoRA, Style LoRA, General image caption, Flux LoRA training, SDXL LoRA training, Dataset training caption or Plain visual description), a saved or shared Vision script, or custom instructions. Optionally set a trigger token, **Constant traits** that the model must leave out, and extra instructions. **Caption this image** replaces that image's caption. **Caption pending** handles missing captions, failed attempts and preparation changes. **Requests at a time** runs up to four captions in parallel when your server supports it. A failed image is marked and the batch continues; **Stop** ends the running requests.
+5. Review each caption. The word count, approval state and any warnings appear under the editor. A caption that mentions a constant trait, or describes hair, eye or skin color with a character script, is flagged. **Approve** marks a model or imported caption as checked (Ctrl/Cmd+Enter approves and opens the next image). Editing a caption by hand also approves it. Preparation changes keep the text but ask for review again. **Show**, under the preview, filters the queue: without caption, to review, approved, failed, with warnings or with size problems. **Bulk edit captions** finds and replaces text, renames the trigger or adds text at the start or end of the shown captions, with one undo. **Import captions** reads `.txt` files for images already in the queue. New manual edits made during generation are protected from older model replies.
+6. **Export** as a ZIP download or straight into a folder on this computer (**Choose…** in the desktop app, or type the full path). Options: original or numbered file names (`prefix_0001`), a Kohya folder such as `10_tok woman`, `metadata.jsonl` in the Hugging Face imagefolder format, `captions.csv` and **Only approved captions**. Existing files are only replaced when **Replace existing files** is on. Every exported image needs a nonempty caption for its current crop. Images that do not meet the size settings are left out after a confirmation. Duplicate stems and unsafe filename characters are handled so each image keeps its matching caption. The export uses the caption text present when export starts.
 
-Captioning uses the model and sampling controls from Settings and requires a vision-capable model. Only the prepared crop is sent, resized to at most 1536 pixels on its longest side for the model. The higher-resolution dataset export follows your crop/export settings. No scene-invention, country or character-LoRA output filters are added to dataset captions. The optional trigger is added once to newly generated captions; changing scripts or the token does not automatically rewrite existing manual captions.
+Captioning uses the model and the precise generation settings from Settings and requires a vision-capable model. Only the prepared crop is sent, resized to at most 1536 pixels on its longest side for the model. The higher-resolution dataset export follows your crop/export settings. No scene-invention, country or character-LoRA output filters are added to dataset captions. The optional trigger is added once to newly generated captions; changing scripts or the token does not automatically rewrite existing manual captions.
 
-Expand **System script and sharing** to edit instructions or import/export a CyberHub Captioner `.captioner.json` file. The schema-1 `CyberHub` / `system_prompt` / `captioner` envelope and literal placeholders such as `{TRIGGER}` round-trip. Plain UTF-8 `.txt` imports and the configured shared Vision preset folder are supported too. `{WD_TAGS}` scripts need externally supplied tags or editing; this version does not include Auto Tagger or CyberHub's Prompt Library database.
+Expand **System script and sharing** to edit instructions or import/export a CyberHub Captioner `.captioner.json` file. The schema-1 `CyberHub` / `system_prompt` / `captioner` envelope and literal placeholders such as `{TRIGGER}` round-trip. Plain UTF-8 `.txt` imports and the configured shared Vision preset folder are supported too. `{WD_TAGS}` scripts need externally supplied tags or editing; this version does not include Auto Tagger or CyberHub's Prompt Library database. **Save as new**, **Update saved** and **Delete saved** keep your own scripts with the app settings in `caption_scripts.json`.
 
-Source images, crop edits, settings and captions are saved in this app's local IndexedDB for recovery at the same origin/profile. **Clear session** removes this local dataset copy after confirmation; originals and exported ZIPs stay untouched. Watch the storage status and export before closing if local storage fails. Source files are read only and never overwritten. A running caption request can be recovered while the service remains alive; after an app restart, completed captions restore and unfinished images can be retried with Caption pending.
+Source images, crop edits, settings and captions are saved in this app's local IndexedDB for recovery at the same origin/profile. **Clear session** removes this local dataset copy after confirmation; originals and exported ZIPs stay untouched. Watch the storage status and export before closing if local storage fails. Source files are read only and never overwritten. After a reload or restart, completed captions restore and unfinished images can be retried with Caption pending.
 
 This first version supports up to 1,000 images, 100 MB per source file, 40 megapixels per decoded image and a 512 MB dataset ZIP. It uses browser image decoding/canvas processing, with EXIF orientation applied by the decoder. An unchanged full-frame image in source format at its original resolution is exported using its original bytes. Cropped, resized, rotated, flipped or converted images are re-encoded; embedded metadata is not preserved in those processed exports. JPEG uses a white background for transparency. TIFF/BMP, direct sidecar writes beside originals, CyberHub's module system and automatic training are not included.
 
@@ -165,6 +197,8 @@ Click the connection status at the top to open **Settings**, then expand **Gener
 | Reasoning effort | None | Server default, none, minimal, low, medium, high, xhigh or max |
 | Template thinking | Off | Server default, off or on |
 
+**Settings for** switches between two profiles. **Generate scenes (creative)** uses the defaults above. **Image changes, rewrites, edits and captions (precise)** starts at temperature 0.3, top-p 0.9 and presence penalty 0, so faithful work stays close to the source. Each profile has its own Restore defaults.
+
 **Save** applies changes to future runs and stores them in `settings.json`. A running generation keeps the values it started with. Terminal runs also use these saved generation settings. **Cancel** discards changes in the form. **Restore defaults** fills in the original values; press Save to apply them.
 
 The two reasoning controls use different server interfaces. The default pair requests thinking off. Selecting a reasoning level or changing template thinking keeps the controls consistent; contradictory combinations are rejected by the server-side validator too. Choose **Server default** for both to omit both controls. Supported levels and whether thinking can be switched off depend on the server and model.
@@ -175,7 +209,7 @@ Optional controls (`top_k`, `presence_penalty`, `reasoning_effort` and `chat_tem
 
 ## Output
 
-Each run is saved as a `.txt` file with one prompt per line, in the `prompts` folder next to the app unless you choose another folder. The file name holds the image model, subject, direction and time.
+Each run is saved as a `.txt` file with one prompt per line, in the `prompts` folder next to the app unless you choose another folder. The file name holds the image model, subject, direction and time. A `.json` file with the same name holds the brief, model, generation settings and scene ideas, for History. Starred prompts are kept in `favorites.txt` in the same folder.
 
 ## Other servers
 
@@ -222,7 +256,31 @@ python3 scene_director.py --help
 | `web/fonts/` | Archivo and Courier Prime, both under the SIL Open Font License. |
 | `Start Scene Director.command` / `.bat` / `start_scene_director.sh` | Launchers for macOS, Windows and Linux. |
 | `test_scene_director.py` | Tests. Run `python3 -m unittest` in this folder. |
+| `web/app.js`, `web/app.css` | Prompt Studio script and styles. |
+| `web/dataset.js`, `web/dataset-core.js`, `web/dataset.css` | The LoRA Dataset tool and its tested core functions. |
+| `test_features.py` | Tests for the 3.9 features. |
 | `settings.json` | Created when you save connection settings. Holds your API key if you saved one, so do not share it. |
+| `briefs.json`, `caption_scripts.json` | Saved briefs and saved caption scripts, next to `settings.json`. |
+
+## What changed in 3.9.0
+
+- Separate creative and precise generation settings. Edits, rewrites, image changes and captions now default to temperature 0.3 without presence penalty.
+- Prompt actions: star, edit by hand, new version, delete, use in Edit a prompt and queue in ComfyUI. History, starred prompts, saved briefs and a `.json` record for every run.
+- Rotating fixed choices with `|`, a prefix for every prompt, and better variety in long runs through earlier-scene topics and near-duplicate checks.
+- ComfyUI: queue one prompt or a whole run into an API workflow, with prompt-input detection and random seeds.
+- Optional settings are only retried without the optional fields when the error is about them.
+- LoRA Dataset cropper: edge handles, zoom and pan, grid toggle, own ratios, keyboard shortcuts, folder import with matching captions, duplicate check and experimental auto crop with the vision model.
+- LoRA Dataset captions: ten built-in scripts including Krea 2 and Z-Image, constant traits with warnings, parallel requests, failures that no longer stop the batch, approval, filters, bulk edits, caption import and saved scripts.
+- Dataset export to a folder, numbered names, Kohya folders, `metadata.jsonl`, `captions.csv` and an approved-only option.
+- Captions run directly in the service, so captioning and Prompt Studio no longer block each other.
+
+## What changed in 3.8.0
+
+- Crops can no longer be drawn or resized below the minimum size. Near an edge the crop moves inward instead of shrinking.
+- A ratio change applies to every image by default and adjusts each crop around its own center. Per-image ratios remain available.
+- New shortest-side and pixel-area minimums, pixel-area export sizes, rounding to multiples of 8 to 64 px and a **1024 buckets** preset.
+- Too-small images are flagged in the queue, skipped while captioning and left out of the export, with one-click removal.
+- Reviewed captions from 3.7 stay valid as long as the default export settings are used.
 
 ## What changed in 3.7.0
 

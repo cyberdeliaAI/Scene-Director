@@ -6,7 +6,7 @@ SCENE_DIRECTOR_TEST_BACKEND=/absolute/path/to/scene-director-backend python3 -m 
 import contextlib
 import json
 import os
-import select
+import queue
 import subprocess
 import sys
 import tempfile
@@ -38,8 +38,12 @@ class DesktopTests(unittest.TestCase):
     def launch(self):
         self.process = subprocess.Popen(self.command, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
             stderr=subprocess.PIPE, env=self.env, cwd=self.folder.name)
-        self.assertTrue(select.select([self.process.stdout], [], [], 25)[0], "Service startup timed out")
-        ready = self.process.stdout.readline()
+        messages = queue.Queue()
+        threading.Thread(target=lambda: messages.put(self.process.stdout.readline()), daemon=True).start()
+        try:
+            ready = messages.get(timeout=25)
+        except queue.Empty:
+            self.fail("Service startup timed out")
         self.assertTrue(ready, "Service exited before becoming ready")
         message = json.loads(ready)
         self.assertEqual(message["type"], "ready")
@@ -99,6 +103,8 @@ class DesktopTests(unittest.TestCase):
             self.assertEqual(self.call(route, body, token=None)[0], 403)
             self.assertEqual(self.call(route, body, token="wrong")[0], 403)
         self.assertEqual(self.call("/")[0], 200)
+        for route in ('/app.js','/app.css','/prompt-core.js','/dataset.js','/dataset-core.js','/dataset.css','/app-icon.png'):
+            self.assertEqual(self.call(route)[0], 200, route)
         self.assertEqual(self.call("/fonts/archivo.woff2")[0], 200)
         self.assertEqual(self.call("/settings.json")[0], 404)
         state = json.loads(self.call("/api/state")[1])
@@ -115,7 +121,8 @@ class DesktopTests(unittest.TestCase):
         self.close_service()
         settings = self.data_dir / "settings.json"
         self.assertTrue(settings.exists())
-        self.assertEqual(settings.stat().st_mode & 0o777, 0o600)
+        if os.name != "nt":
+            self.assertEqual(settings.stat().st_mode & 0o777, 0o600)
         self.launch()
         status, body = self.call("/api/state")
         self.assertEqual(status, 200)

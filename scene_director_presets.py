@@ -31,7 +31,7 @@ def _directory(directory, kind, warnings):
                 if len(raw) > MAX_PRESET_BYTES:
                     warnings.append(f"Skipped {path.name}: presets must be at most 64 KB.")
                     continue
-                prompt = raw.decode("utf-8-sig").strip()
+                prompt = raw.decode("utf-8-sig").replace("\r\n", "\n").replace("\r", "\n").strip()
                 if not prompt:
                     warnings.append(f"Skipped {path.name}: the preset is empty.")
                     continue

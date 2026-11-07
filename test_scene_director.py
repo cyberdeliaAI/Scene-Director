@@ -576,7 +576,11 @@ class WebTests(unittest.TestCase):
         self.assertEqual(json.loads(content[0]["text"])["reference_mode"], "style")
         self.assertNotIn(image["data_url"], json.dumps(events))
         self.assertNotIn(image["data_url"], self.call("/api/state")[1].decode())
-        self.assertEqual([p.suffix for p in Path(self.folder.name).iterdir()], [".txt"])
+        files = sorted(Path(self.folder.name).iterdir(), key=lambda p: p.suffix)
+        self.assertEqual([p.suffix for p in files], [".json", ".txt"])
+        record = files[0].read_text(encoding="utf-8")
+        self.assertNotIn(image["data_url"].split(",", 1)[1][:40], record)
+        self.assertEqual(json.loads(record)["request"]["reference"]["mode"], "style")
 
     def test_bad_reference_is_refused_before_a_process_starts(self):
         for image in ({"data_url": "https://example.com/image.png"},
@@ -696,7 +700,8 @@ class ReferenceTests(unittest.TestCase):
             code, events, _ = collect(brief(reference=image), 1, server.url)
         self.assertEqual(code, 1)
         self.assertIn("could not read the reference image", events[-1]["message"])
-        self.assertEqual(len(server.requests), 2)
+        # An image refusal is not about optional sampling fields, so it is not retried without them.
+        self.assertEqual(len(server.requests), 1)
 
     def test_lm_studio_v1_chooses_loaded_vision_instance(self):
         models = [

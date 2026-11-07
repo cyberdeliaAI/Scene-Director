@@ -5,351 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Scene Director</title>
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect x='3' y='12' width='26' height='17' rx='2' fill='%23F2A93B'/%3E%3Cpath d='M3 6l25-3 1 6-25 3z' fill='%23F2A93B'/%3E%3C/svg%3E">
-<style>
-/* Fonts ship with the app (SIL Open Font License, see web/fonts), so it works offline. */
-@font-face {
-  font-family: "Archivo SD"; font-style: normal; font-display: swap;
-  font-weight: 100 900; font-stretch: 62% 125%;
-  src: url("/fonts/archivo.woff2") format("woff2-variations"), url("/fonts/archivo.woff2") format("woff2");
-}
-@font-face {
-  font-family: "Courier Prime SD"; font-style: normal; font-display: swap; font-weight: 400;
-  src: url("/fonts/courier-prime-400.woff2") format("woff2");
-}
-@font-face {
-  font-family: "Courier Prime SD"; font-style: normal; font-display: swap; font-weight: 700;
-  src: url("/fonts/courier-prime-700.woff2") format("woff2");
-}
-[hidden] { display: none !important; }
-:root {
-  color-scheme: dark;
-  --bg: #1b1f27;
-  --panel: #232935;
-  --field: #2b3240;
-  --line: #3a4252;
-  --text: #eceae5;
-  --muted: #a3aab6;
-  --faint: #7c8493;
-  --accent: #f2a93b;
-  --accent-ink: #1b1f27;
-  --accent-text: #f5b95c;
-  --page: #e2e5e9;
-  --page-ink: #1e232b;
-  --page-muted: #5d6673;
-  --page-line: #c4cad2;
-  --ok: #6cc79a;
-  --err: #f07a6a;
-  --ui: "Archivo SD", system-ui, -apple-system, "Segoe UI", sans-serif;
-  --script: "Courier Prime SD", "Courier New", Courier, monospace;
-  --radius: 8px;
-}
-@media (prefers-color-scheme: light) {
-  :root {
-    color-scheme: light;
-    --bg: #e8ebef;
-    --panel: #f7f8fa;
-    --field: #ffffff;
-    --line: #cdd3db;
-    --text: #1e232b;
-    --muted: #566070;
-    --faint: #7b8493;
-    --accent-text: #8a5600;
-    --page: #ffffff;
-    --page-line: #d9dee5;
-    --ok: #1f8a57;
-    --err: #c2412f;
-  }
-}
-* { box-sizing: border-box; }
-html { -webkit-text-size-adjust: 100%; }
-body {
-  margin: 0;
-  background: var(--bg);
-  color: var(--text);
-  font: 400 15px/1.5 var(--ui);
-}
-button, input, select, textarea { font: inherit; color: inherit; }
-button { cursor: pointer; }
-:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
-
-/* Header ----------------------------------------------------------------- */
-.top {
-  display: flex; align-items: flex-end; justify-content: space-between; gap: 16px;
-  max-width: 1320px; margin: 0 auto; padding: 26px 28px 18px;
-}
-.brand h1 {
-  margin: 0; font-size: 30px; line-height: 1; font-weight: 800;
-  font-stretch: 125%; letter-spacing: -0.015em;
-}
-.brand p { margin: 8px 0 0; color: var(--muted); font-size: 14px; }
-.conn-pill {
-  display: inline-flex; align-items: center; gap: 9px; flex-shrink: 0;
-  padding: 8px 14px; border: 1px solid var(--line); border-radius: 999px;
-  background: var(--panel); font-size: 13px; max-width: 46vw;
-}
-.conn-pill span:last-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.dot { width: 8px; height: 8px; border-radius: 50%; background: var(--faint); flex-shrink: 0; }
-.dot.ok { background: var(--ok); }
-.dot.err { background: var(--err); }
-
-/* Layout ------------------------------------------------------------------- */
-.app {
-  display: grid; grid-template-columns: minmax(340px, 430px) minmax(0, 1fr); gap: 28px;
-  max-width: 1320px; margin: 0 auto; padding: 0 28px 40px; align-items: start;
-}
-.brief {
-  background: var(--panel); border: 1px solid var(--line); border-radius: 12px;
-  padding: 6px 22px 22px;
-}
-.group { border: 0; margin: 0; padding: 18px 0; border-bottom: 1px solid var(--line); min-width: 0; }
-details.group { border-bottom: 0; }
-.group > legend, .label {
-  display: block; padding: 0; margin: 0 0 8px; font-weight: 650; font-size: 15px;
-}
-.group > legend { float: left; width: 100%; }
-.group > legend + * { clear: both; }
-.help { margin: 7px 0 0; color: var(--muted); font-size: 13px; line-height: 1.45; }
-.optional { color: var(--faint); font-weight: 400; }
-
-input[type="text"], input[type="password"], input[type="number"], select, textarea {
-  width: 100%; background: var(--field); border: 1px solid var(--line);
-  border-radius: var(--radius); padding: 9px 11px; outline: none;
-}
-input:focus-visible, select:focus-visible, textarea:focus-visible { border-color: var(--accent); outline: none; box-shadow: 0 0 0 1px var(--accent); }
-textarea { resize: vertical; min-height: 64px; line-height: 1.45; }
-::placeholder { color: var(--faint); }
-
-/* Segmented control */
-.seg {
-  display: flex; padding: 3px; gap: 3px; background: var(--field);
-  border: 1px solid var(--line); border-radius: 10px;
-}
-.seg label { flex: 1; position: relative; }
-.seg input { position: absolute; opacity: 0; inset: 0; margin: 0; cursor: pointer; }
-.seg span {
-  display: block; text-align: center; padding: 7px 8px; border-radius: 7px;
-  font-size: 14px; color: var(--muted); white-space: nowrap; transition: background .15s, color .15s;
-}
-.seg input:checked + span { background: var(--accent); color: var(--accent-ink); font-weight: 650; }
-.seg input:focus-visible + span { outline: 2px solid var(--accent); outline-offset: 2px; }
-
-/* Chips */
-.chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 9px; }
-.chip {
-  border: 1px solid var(--line); background: transparent; color: var(--muted);
-  border-radius: 999px; padding: 3px 11px; font-size: 13px;
-}
-.chip:hover { color: var(--text); border-color: var(--faint); }
-.chip[aria-pressed="true"] { color: var(--accent-text); border-color: var(--accent); }
-
-/* Switch */
-.switch { display: flex; align-items: flex-start; gap: 11px; margin-top: 12px; cursor: pointer; }
-.switch input { position: absolute; opacity: 0; width: 1px; height: 1px; }
-.track {
-  flex-shrink: 0; width: 36px; height: 20px; border-radius: 999px; margin-top: 1px;
-  background: var(--line); position: relative; transition: background .15s;
-}
-.track::after {
-  content: ""; position: absolute; top: 3px; left: 3px; width: 14px; height: 14px;
-  border-radius: 50%; background: var(--text); transition: transform .15s;
-}
-.switch input:checked + .track { background: var(--accent); }
-.switch input:checked + .track::after { transform: translateX(16px); background: var(--accent-ink); }
-.switch input:focus-visible + .track { outline: 2px solid var(--accent); outline-offset: 2px; }
-.switch strong { display: block; font-weight: 600; font-size: 14px; }
-.switch small { display: block; color: var(--muted); font-size: 13px; line-height: 1.4; }
-
-.pair { display: grid; gap: 14px; }
-.pair-row { display: grid; gap: 4px; }
-.pair-row .switch { margin-top: 6px; }
-
-/* Count stepper */
-.count-row { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
-.stepper { display: inline-flex; border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; background: var(--field); }
-.stepper button { width: 38px; border: 0; background: transparent; font-size: 18px; color: var(--muted); }
-.stepper button:hover { color: var(--text); background: var(--line); }
-.stepper input { width: 64px; border: 0; border-radius: 0; text-align: center; font-weight: 650; -moz-appearance: textfield; }
-.stepper input::-webkit-inner-spin-button { -webkit-appearance: none; }
-.count-row .chips { margin: 0; }
-
-/* Fine-tune */
-details.more { padding: 0; }
-details.more > summary {
-  list-style: none; cursor: pointer; display: flex; align-items: center; gap: 10px;
-  padding: 16px 0; font-weight: 650;
-}
-details.more > summary::-webkit-details-marker { display: none; }
-details.more > summary::before {
-  content: ""; width: 7px; height: 7px; border-right: 2px solid var(--muted); border-bottom: 2px solid var(--muted);
-  transform: rotate(-45deg); transition: transform .15s; margin-right: 2px;
-}
-details.more[open] > summary::before { transform: rotate(45deg); }
-.badge { font-size: 12px; font-weight: 600; color: var(--accent-text); }
-.more-body { display: grid; gap: 18px; padding-bottom: 6px; }
-
-/* Tags */
-.tags {
-  display: flex; flex-wrap: wrap; gap: 6px; align-items: center; min-height: 42px;
-  background: var(--field); border: 1px solid var(--line); border-radius: var(--radius); padding: 6px 8px;
-}
-.tags:focus-within { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
-.tags input { flex: 1; min-width: 120px; border: 0; background: transparent; padding: 3px; outline: none; box-shadow: none; }
-.tag { display: inline-flex; align-items: center; gap: 4px; background: var(--line); border-radius: 6px; padding: 2px 4px 2px 9px; font-size: 13px; }
-.tag button { border: 0; background: transparent; color: var(--muted); padding: 0 5px; font-size: 15px; line-height: 1; }
-.tag button:hover { color: var(--text); }
-
-.fixed-list { display: grid; gap: 8px; }
-.fixed-row { display: grid; grid-template-columns: 1fr auto 1.4fr auto; gap: 6px; align-items: center; }
-.fixed-row .eq { color: var(--faint); }
-.icon-btn { border: 0; background: transparent; color: var(--muted); font-size: 18px; padding: 4px 8px; border-radius: 6px; }
-.icon-btn:hover { color: var(--text); background: var(--field); }
-.link-btn { border: 0; background: transparent; color: var(--accent-text); padding: 4px 0; font-size: 14px; font-weight: 600; justify-self: start; }
-
-/* Buttons */
-.actions { display: flex; gap: 10px; padding-top: 20px; }
-.btn {
-  border: 1px solid var(--line); background: var(--field); border-radius: var(--radius);
-  padding: 9px 16px; font-weight: 600; font-size: 14px;
-}
-.btn:hover:not(:disabled) { border-color: var(--faint); }
-.btn:disabled { opacity: .45; cursor: default; }
-.btn.primary {
-  flex: 1; background: var(--accent); color: var(--accent-ink); border-color: var(--accent);
-  font-size: 16px; font-weight: 700; padding: 12px 18px;
-}
-.btn.primary:hover:not(:disabled) { filter: brightness(1.06); }
-.kbd-hint { margin: 10px 0 0; color: var(--faint); font-size: 12px; text-align: center; }
-
-/* Script page -------------------------------------------------------------- */
-.script { min-width: 0; max-width: 840px; width: 100%; position: sticky; top: 16px; }
-.script-bar {
-  display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap;
-  margin-bottom: 12px;
-}
-.script-bar h2 { margin: 0; font-size: 18px; font-weight: 700; font-stretch: 112%; }
-.meta { color: var(--muted); font-size: 13px; margin-top: 2px; }
-.bar-actions { display: flex; gap: 8px; }
-.progress { height: 3px; background: var(--line); border-radius: 3px; overflow: hidden; margin-bottom: 10px; }
-.progress div { height: 100%; width: 0; background: var(--accent); transition: width .3s ease; }
-.status { min-height: 21px; color: var(--muted); font-size: 13px; margin-bottom: 10px; display: flex; gap: 12px; align-items: baseline; flex-wrap: wrap; }
-.status .link-btn { font-size: 13px; padding: 0; }
-.log { margin: -4px 0 12px; padding: 10px 14px; border-left: 2px solid var(--line); color: var(--muted); font-size: 13px; max-height: 160px; overflow: auto; }
-.log p { margin: 0 0 4px; }
-.log .warn { color: var(--accent-text); }
-
-.page {
-  background: var(--page); color: var(--page-ink); border-radius: 3px;
-  box-shadow: 0 1px 0 rgba(0,0,0,.25), 0 14px 40px -18px rgba(0,0,0,.6);
-  padding: 46px 64px 52px 76px; min-height: calc(100vh - 210px);
-  max-height: calc(100vh - 190px); overflow-y: auto;
-  font-family: var(--script); font-size: 15px; line-height: 1.55;
-}
-@media (prefers-color-scheme: light) {
-  .page { box-shadow: 0 0 0 1px var(--page-line), 0 14px 40px -24px rgba(30,35,43,.35); }
-}
-.page .transition { margin: 0 0 26px; font-weight: 700; }
-.page .transition.out { text-align: right; margin: 34px 0 6px; }
-.page .empty p { margin: 0 0 14px; max-width: 58ch; }
-.page .empty .muted { color: var(--page-muted); }
-.scene { position: relative; margin: 0 0 30px; max-width: 64ch; }
-.scene-no {
-  position: absolute; left: -52px; top: 0; width: 36px; text-align: right;
-  font-weight: 700; color: var(--page-muted);
-}
-.slug { margin: 0 0 6px; font: 700 15px/1.45 var(--script); text-transform: uppercase; }
-.action { margin: 0; }
-.scene-foot { display: flex; align-items: center; gap: 14px; margin-top: 7px; font-family: var(--ui); font-size: 12px; color: var(--page-muted); }
-.copy {
-  border: 1px solid var(--page-line); background: transparent; color: var(--page-ink);
-  border-radius: 6px; padding: 2px 10px; font: 600 12px/1.6 var(--ui);
-}
-.copy:hover { border-color: var(--page-muted); }
-.new { animation: arrive .5s ease-out; }
-@keyframes arrive { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
-/* Live writing */
-.live { margin: 0 0 30px; }
-.live-head {
-  display: flex; gap: 10px; align-items: baseline; margin: 0 0 16px; max-width: 64ch;
-  font: 600 12px/1.4 var(--ui); color: var(--page-muted);
-  border-top: 1px dashed var(--page-line); padding-top: 12px;
-}
-.live-head .pulse { width: 7px; height: 7px; border-radius: 50%; background: var(--accent); align-self: center; animation: pulse 1.2s ease-in-out infinite; }
-.live-head .elapsed { margin-left: auto; font-weight: 400; font-variant-numeric: tabular-nums; }
-@keyframes pulse { 50% { opacity: .25; } }
-.thinking {
-  margin: 0 0 18px; max-width: 64ch; color: var(--page-muted); font-style: italic;
-  font-size: 13.5px; line-height: 1.5;
-}
-.thinking b { font-style: normal; font-family: var(--ui); font-size: 12px; font-weight: 600; margin-right: 6px; }
-.scene.draft { color: var(--page-muted); }
-.scene.draft .slug { color: var(--page-ink); opacity: .7; }
-.scene.draft .action:empty::before { content: "…"; }
-.caret {
-  display: inline-block; width: .55em; height: 1.05em; margin-left: 2px; vertical-align: text-bottom;
-  background: var(--accent); animation: blink 1s steps(1) infinite;
-}
-@keyframes blink { 50% { opacity: 0; } }
-.saved-line { font-family: var(--ui); font-size: 12px; color: var(--page-muted); text-align: right; word-break: break-all; margin: 0; }
-.error-box {
-  font-family: var(--ui); border-left: 3px solid var(--err); background: color-mix(in srgb, var(--err) 9%, transparent);
-  padding: 12px 16px; margin: 0 0 26px; border-radius: 0 6px 6px 0; max-width: 64ch;
-}
-.error-box strong { display: block; margin-bottom: 3px; }
-.error-box p { margin: 0; font-size: 14px; }
-
-/* Connection dialog ------------------------------------------------------- */
-dialog {
-  width: min(560px, calc(100vw - 32px)); border: 1px solid var(--line); border-radius: 14px;
-  background: var(--panel); color: var(--text); padding: 0;
-}
-dialog::backdrop { background: rgba(10, 12, 16, .6); }
-.dlg-head { display: flex; justify-content: space-between; align-items: center; padding: 18px 22px 0; }
-.dlg-head h2 { margin: 0; font-size: 19px; font-weight: 700; font-stretch: 112%; }
-.dlg-body { display: grid; gap: 18px; padding: 16px 22px 8px; }
-.sampling { border-top: 1px solid var(--line); padding-top: 14px; }
-.sampling summary { cursor: pointer; font-weight: 650; }
-.sampling-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin: 14px 0; }
-.sampling-grid .label { display: block; }
-.reference-preview { display: block; width: 100%; max-height: 220px; object-fit: contain; background: var(--panel); border: 1px solid var(--line); border-radius: 8px; margin: 12px 0 8px; }
-.reference-caption { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 14px; }
-.reference-caption span { overflow-wrap: anywhere; font-size: 12px; color: var(--muted); }
-.reference-body { display: grid; gap: 12px; padding-top: 14px; }
-.image-dropzone { position: relative; border: 2px dashed var(--line); border-radius: 10px; background: var(--bg); padding: 25px 16px; text-align: center; transition: border-color .15s, background .15s; }
-.image-dropzone:hover, .image-dropzone.drag-over { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 9%, var(--panel)); }
-.image-dropzone:focus-within { outline: 2px solid var(--accent); outline-offset: 3px; }
-.image-dropzone .image-file { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; }
-.seg.workflows { display: grid; grid-template-columns: 1fr 1fr; }
-.prompt-edit-text { white-space: pre-wrap; }
-.preset-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
-#rewriteSystem { min-height: 210px; font-size: 13px; line-height: 1.55; }
-.drop-copy { display: grid; gap: 5px; pointer-events: none; }
-.drop-copy strong { font-size: 16px; }
-.drop-copy span, .drop-copy small { color: var(--muted); font-size: 13px; }
-dialog { max-height: calc(100dvh - 32px); overflow-y: auto; }
-.inline { display: flex; gap: 8px; }
-.inline > :first-child { flex: 1; min-width: 0; }
-.test-result { font-size: 13px; color: var(--muted); min-height: 20px; }
-.test-result.ok { color: var(--ok); }
-.test-result.err { color: var(--err); }
-.dlg-foot { display: flex; justify-content: space-between; gap: 10px; padding: 14px 22px 20px; flex-wrap: wrap; }
-.dlg-foot .right { display: flex; gap: 10px; }
-.dlg-foot .btn.primary { flex: none; font-size: 14px; padding: 9px 18px; }
-
-/* Responsive ---------------------------------------------------------------- */
-@media (max-width: 920px) {
-  .app { grid-template-columns: 1fr; padding: 0 16px 32px; gap: 22px; }
-  .top { padding: 20px 16px 16px; flex-wrap: wrap; align-items: center; }
-  .conn-pill { max-width: 100%; }
-  .script { position: static; }
-  .page { max-height: none; min-height: 320px; padding: 30px 22px 34px 22px; }
-  .scene-no { position: static; display: block; width: auto; text-align: left; margin-bottom: 2px; }
-  .brief { padding: 4px 16px 18px; }
-}
-@media (prefers-reduced-motion: reduce) {
-  *, *::before, *::after { transition: none !important; animation: none !important; }
-}
-</style>
+<link rel="stylesheet" href="/app.css">
 <link rel="stylesheet" href="/dataset.css">
 <link rel="icon" type="image/png" href="/app-icon.png">
 </head>
@@ -570,8 +226,22 @@ dialog { max-height: calc(100dvh - 32px); overflow-y: auto; }
           <span class="label">Fixed choices <span class="optional">optional</span></span>
           <div class="fixed-list" id="fixedList"></div>
           <button type="button" class="link-btn" id="addFixed">Add a fixed choice</button>
-          <p class="help">Lock one aspect for every prompt, like setting = indoors or framing = full body.</p>
+          <p class="help">Lock one aspect for every prompt, like setting = indoors. Separate values with | to rotate them evenly: framing = close-up | medium | full body.</p>
         </div>
+        <div>
+          <label class="label" for="outputPrefix">Prefix every prompt <span class="optional">optional</span></label>
+          <input type="text" id="outputPrefix" data-bind="outputPrefix" maxlength="200" placeholder="my_lora_trigger">
+          <p class="help">Added to the start of every saved prompt, for example your LoRA trigger. The model never writes it.</p>
+        </div>
+      </div>
+    </details>
+
+    <details class="group more" id="briefPresets">
+      <summary>Saved briefs</summary>
+      <div class="brief-presets">
+        <div class="inline"><select id="briefSelect" aria-label="Saved brief"></select><button type="button" class="btn" id="briefLoad">Load</button><button type="button" class="link-btn" id="briefDelete">Delete</button></div>
+        <div class="inline"><input type="text" id="briefName" maxlength="100" placeholder="Name for the current brief" aria-label="Name for the current brief"><button type="button" class="btn" id="briefSave">Save</button></div>
+        <p class="help" id="briefStatus" role="status">Save every field of the current workflow under a name. Reference images are not stored.</p>
       </div>
     </details>
 
@@ -589,6 +259,8 @@ dialog { max-height: calc(100dvh - 32px); overflow-y: auto; }
         <div class="meta" id="meta">Nothing written yet.</div>
       </div>
       <div class="bar-actions">
+        <button type="button" class="btn" id="historyBtn">History</button>
+        <button type="button" class="btn" id="queueAll" hidden>Queue all in ComfyUI</button>
         <button type="button" class="btn" id="copyAll" disabled>Copy all</button>
         <button type="button" class="btn" id="openFolder">Open folder</button>
       </div>
@@ -604,33 +276,82 @@ dialog { max-height: calc(100dvh - 32px); overflow-y: auto; }
   <div class="ds-heading"><div><h2 id="datasetTitle">LoRA Dataset</h2><p class="help">Prepare a batch of images, then write and review their training captions. This tool is separate from Prompt Studio.</p></div><button type="button" class="btn" id="dsSettings">Model settings</button></div>
   <div class="ds-layout">
     <aside class="ds-sidebar">
-      <div class="ds-section"><h3>Images</h3><div class="ds-buttons"><button type="button" class="btn" id="dsAdd">Add images…</button><button type="button" class="link-btn" id="dsClear">Clear session</button></div><input type="file" id="dsFiles" accept="image/png,image/jpeg,image/webp" multiple hidden><p class="help">PNG, JPEG or WebP. Drop files on the preview. Originals stay unchanged.</p><p class="help" id="dsStorage" role="status">Images and captions are saved locally in this app for session recovery.</p></div>
+      <div class="ds-section"><h3>Images</h3>
+        <div class="ds-buttons"><button type="button" class="btn" id="dsAdd">Add images…</button><button type="button" class="btn" id="dsAddFolder">Add folder…</button><button type="button" class="link-btn" id="dsClear">Clear session</button></div>
+        <input type="file" id="dsFiles" accept="image/png,image/jpeg,image/webp,.txt,text/plain" multiple hidden><input type="file" id="dsFolderInput" webkitdirectory multiple hidden>
+        <p class="help">PNG, JPEG or WebP. A .txt file with the same name is imported as the caption. Drop files on the preview. Originals stay unchanged.</p>
+        <p class="help" id="dsStorage" role="status">Images and captions are saved locally in this app for session recovery.</p>
+      </div>
       <div class="ds-section" id="dsPrepareControls"><h3>Crop and export</h3>
-        <label class="label" for="dsAspect">Aspect ratio</label><select id="dsAspect"><option value="0">Free / original</option><option value="1">1:1</option><option value="0.6666666667">2:3</option><option value="1.5">3:2</option><option value="0.8">4:5</option><option value="1.25">5:4</option><option value="0.5625">9:16</option><option value="1.7777777778">16:9</option></select>
-        <div class="ds-buttons"><button type="button" class="btn" id="dsSquare">1024 square</button><button type="button" class="link-btn" id="dsResetCrop">Center crop</button></div>
-        <label class="label" for="dsMaxSide">Maximum export side</label><input type="number" id="dsMaxSide" min="0" max="32768" step="1" value="1024"><p class="help">Pixels. 0 keeps crop resolution. Images are never enlarged.</p>
-        <label class="label" for="dsMinimum">Minimum size</label><select id="dsMinimum"><option value="off">Off</option><option value="dimensions">Width × height</option><option value="longest">Longest side</option></select>
-        <div class="ds-pair"><div><label for="dsMinWidth">Width / longest</label><input type="number" id="dsMinWidth" min="1" max="32768" value="1024"></div><div><label for="dsMinHeight">Height</label><input type="number" id="dsMinHeight" min="1" max="32768" value="1024"></div></div>
+        <label class="label" for="dsAspect">Aspect ratio</label><select id="dsAspect"><option value="0">Free / original</option><option value="1">1:1</option><option value="0.6666666667">2:3</option><option value="1.5">3:2</option><option value="0.75">3:4</option><option value="1.3333333333">4:3</option><option value="0.8">4:5</option><option value="1.25">5:4</option><option value="0.5625">9:16</option><option value="1.7777777778">16:9</option></select>
+        <div class="ds-inline"><input type="text" id="dsCustomRatio" maxlength="11" placeholder="Own ratio, e.g. 7:9" aria-label="Own aspect ratio"><button type="button" class="btn" id="dsAddRatio">Add</button></div>
+        <label class="ds-check"><input type="checkbox" id="dsAspectAll" checked> Same ratio for all images</label>
+        <p class="help">Changing the ratio adjusts every crop around its center. Turn off to choose a ratio per image.</p>
+        <div class="ds-buttons"><button type="button" class="btn" id="dsSquare" title="1:1 crops of at least 1024 × 1024, exported at 1024 × 1024">1024 square</button><button type="button" class="btn" id="dsBuckets" title="Free crops of at least 1024 × 1024 pixels of area, exported in multiples of 64">1024 buckets</button><button type="button" class="link-btn" id="dsResetCrop">Center crop</button></div>
+        <label class="label" for="dsResize">Export size</label><select id="dsResize"><option value="longest">Longest side</option><option value="area">Pixel area (training buckets)</option></select>
+        <div id="dsMaxSideField"><label class="label" for="dsMaxSide">Maximum longest side</label><input type="number" id="dsMaxSide" min="0" max="32768" step="1" value="1024"><p class="help">Pixels. 0 keeps crop resolution.</p></div>
+        <div id="dsTargetAreaField" hidden><label class="label" for="dsTargetArea">Target area</label><input type="number" id="dsTargetArea" min="64" max="32768" step="1" value="1024"><p class="help">1024 means about 1024 × 1024 pixels in total, for example 832 × 1216 for a 2:3 crop.</p></div>
+        <label class="label" for="dsSnap">Round to a multiple of</label><select id="dsSnap"><option value="0">Off</option><option value="8">8 px</option><option value="16">16 px</option><option value="32">32 px</option><option value="64">64 px</option></select>
+        <p class="help">Images are never enlarged. Rounding trims a few edge pixels so the image keeps its shape.</p>
+        <label class="label" for="dsMinimum">Minimum size</label><select id="dsMinimum"><option value="off">Off</option><option value="dimensions">Width × height</option><option value="longest">Longest side</option><option value="shortest">Shortest side</option><option value="area">Pixel area</option></select>
+        <div class="ds-pair" id="dsMinFields"><div><label for="dsMinWidth" id="dsMinWidthLabel">Width</label><input type="number" id="dsMinWidth" min="1" max="32768" value="1024"></div><div id="dsMinHeightField"><label for="dsMinHeight">Height</label><input type="number" id="dsMinHeight" min="1" max="32768" value="1024"></div></div>
+        <p class="help" id="dsMinHelp"></p>
         <label class="label" for="dsFormat">Export format</label><select id="dsFormat"><option value="original">Source format</option><option value="png">PNG</option><option value="jpg">JPEG</option><option value="webp">WebP</option></select>
         <label class="label" for="dsQuality">JPEG / WebP quality</label><input type="number" id="dsQuality" min="10" max="100" value="95">
+        <details class="ds-details" id="dsAutoDetails"><summary>Auto crop with the vision model</summary>
+          <label class="label" for="dsAutoTarget">Crop to</label><select id="dsAutoTarget"><option value="face">Face close-up</option><option value="head">Head and shoulders</option><option value="upper_body">Upper body</option><option value="person">Full person</option><option value="subject">Main subject</option></select>
+          <label class="label" for="dsAutoPadding">Padding around it (%)</label><input type="number" id="dsAutoPadding" min="0" max="200" step="1" value="15">
+          <div class="ds-buttons"><button type="button" class="btn" id="dsAutoOne">This image</button><button type="button" class="btn" id="dsAutoAll">All images</button></div>
+          <p class="help">Experimental. The vision model finds the region; the crop follows your ratio and minimum. Check every result. Each crop can be undone.</p>
+        </details>
       </div>
       <div class="ds-section" id="dsCaptionControls" hidden><h3>Training captions</h3>
-        <label class="label" for="dsPreset">Caption script</label><select id="dsPreset"><option value="character">Character LoRA</option><option value="general">General image caption</option><option value="style">Style LoRA</option><option value="custom">Custom script</option></select>
+        <label class="label" for="dsPreset">Caption script</label><select id="dsPreset"></select>
         <label class="label" for="dsTrigger">Trigger token <span class="optional">optional</span></label><input type="text" id="dsTrigger" maxlength="200" placeholder="my_character"><p class="help">Added once at the start. Character captions focus on changing details, leaving stable identity to the token.</p>
-        <details id="dsScriptDetails"><summary>System script and sharing</summary><label class="label" for="dsScriptTitle">Prompt title</label><input type="text" id="dsScriptTitle" maxlength="200" value="Character LoRA"><label class="label" for="dsSystem">System instructions</label><textarea id="dsSystem" rows="9" maxlength="100000" spellcheck="false"></textarea><div class="ds-buttons"><button type="button" class="btn" id="dsImportScript">Import script…</button><button type="button" class="btn" id="dsExportScript">Export JSON</button></div><input type="file" id="dsScriptFile" accept=".json,.txt" hidden><p class="help">Supports CyberHub Captioner .captioner.json and plain UTF-8 .txt scripts. Import loads a local draft.</p></details>
+        <label class="label" for="dsTraits">Constant traits <span class="optional">optional</span></label><input type="text" id="dsTraits" maxlength="1000" placeholder="red hair, green eyes, freckles"><p class="help">Traits that never change in this dataset. The model leaves them out, and captions that still mention them are flagged.</p>
+        <details id="dsScriptDetails"><summary>System script and sharing</summary><label class="label" for="dsScriptTitle">Prompt title</label><input type="text" id="dsScriptTitle" maxlength="200" value="Character LoRA"><label class="label" for="dsSystem">System instructions</label><textarea id="dsSystem" rows="9" maxlength="100000" spellcheck="false"></textarea>
+          <div class="ds-buttons"><button type="button" class="btn" id="dsSaveScript">Save as new</button><button type="button" class="btn" id="dsUpdateScript" hidden>Update saved</button><button type="button" class="link-btn" id="dsDeleteScript" hidden>Delete saved</button></div>
+          <div class="ds-buttons"><button type="button" class="btn" id="dsImportScript">Import script…</button><button type="button" class="btn" id="dsExportScript">Export JSON</button></div><input type="file" id="dsScriptFile" accept=".json,.txt" hidden>
+          <p class="help">Saved scripts are kept with the app settings. Import and export use CyberHub Captioner .captioner.json or plain UTF-8 .txt files.</p></details>
         <label class="label" for="dsExtra">Extra caption instructions <span class="optional">optional</span></label><textarea id="dsExtra" rows="2" maxlength="4000" placeholder="Describe clothing and pose; avoid guesses about hidden details."></textarea>
-        <div class="ds-buttons"><button type="button" class="btn primary" id="dsCaptionCurrent">Caption this image</button><button type="button" class="btn" id="dsCaptionPending">Caption pending</button><button type="button" class="btn" id="dsStop" hidden>Stop batch</button></div>
-        <p class="help">The selected vision model receives the prepared crop only when you start captioning. Pending captions are missing captions or crops needing review.</p>
+        <label class="label" for="dsParallel">Requests at a time</label><select id="dsParallel"><option value="1">1</option><option value="2">2</option><option value="3">3</option><option value="4">4</option></select><p class="help">More than 1 only helps when your server runs parallel requests, such as llama-server with --parallel or LM Studio with parallel slots.</p>
+        <div class="ds-buttons"><button type="button" class="btn primary" id="dsCaptionCurrent">Caption this image</button><button type="button" class="btn" id="dsCaptionPending">Caption pending</button><button type="button" class="btn" id="dsStop" hidden>Stop</button></div>
+        <p class="help">Pending means no caption, a failed attempt or a crop that changed. Failures are marked and the batch continues. Captions use the precise generation settings.</p>
+        <div class="ds-buttons"><button type="button" class="btn" id="dsImportCaptions">Import captions…</button></div><input type="file" id="dsCaptionFiles" accept=".txt,text/plain" multiple hidden>
+        <details class="ds-details" id="dsBulkDetails"><summary>Bulk edit captions</summary>
+          <p class="help">Applies to the images shown by the filter under the preview.</p>
+          <div class="ds-pair"><div><label for="dsFind">Find</label><input type="text" id="dsFind"></div><div><label for="dsReplace">Replace with</label><input type="text" id="dsReplace"></div></div>
+          <label class="ds-check"><input type="checkbox" id="dsMatchCase"> Match case</label>
+          <div class="ds-buttons"><button type="button" class="btn" id="dsBulkReplace">Replace</button></div>
+          <div class="ds-pair"><div><label for="dsTriggerFrom">Trigger now</label><input type="text" id="dsTriggerFrom"></div><div><label for="dsTriggerTo">New trigger</label><input type="text" id="dsTriggerTo"></div></div>
+          <div class="ds-buttons"><button type="button" class="btn" id="dsBulkTrigger">Rename trigger</button></div>
+          <div class="ds-pair"><div><label for="dsAddStart">Add at start</label><input type="text" id="dsAddStart"></div><div><label for="dsAddEnd">Add at end</label><input type="text" id="dsAddEnd"></div></div>
+          <div class="ds-buttons"><button type="button" class="btn" id="dsBulkAffix">Add text</button><button type="button" class="link-btn" id="dsBulkUndo" hidden>Undo last bulk edit</button></div>
+        </details>
       </div>
-      <div class="ds-section"><h3>Dataset export</h3><button type="button" class="btn primary" id="dsExport">Export images + captions…</button><p class="help">A ZIP with each prepared image and a matching .txt caption. Every queued image must have a reviewed caption. Remove unwanted images from the queue.</p></div>
+      <div class="ds-section"><h3>Dataset export</h3>
+        <label class="label" for="dsExportMode">Export to</label><select id="dsExportMode"><option value="zip">ZIP download</option><option value="folder">A folder on this computer</option></select>
+        <div id="dsFolderFields" hidden><label class="label" for="dsExportFolder">Folder</label><div class="ds-inline"><input type="text" id="dsExportFolder" placeholder="/path/to/dataset"><button type="button" class="btn" data-choose-folder="dataset" aria-label="Choose export folder" hidden>Choose…</button></div><label class="ds-check"><input type="checkbox" id="dsOverwrite"> Replace existing files</label></div>
+        <label class="label" for="dsNaming">File names</label><select id="dsNaming"><option value="original">Original names</option><option value="numbered">Numbered</option></select>
+        <div id="dsPrefixField" hidden><label class="label" for="dsNamePrefix">Name prefix</label><input type="text" id="dsNamePrefix" maxlength="80" placeholder="Trigger token, or image"></div>
+        <label class="ds-check"><input type="checkbox" id="dsKohya"> Kohya folder (repeats_trigger class)</label>
+        <div class="ds-pair" id="dsKohyaFields" hidden><div><label for="dsRepeats">Repeats</label><input type="number" id="dsRepeats" min="1" max="1000" value="10"></div><div><label for="dsClassWord">Class word</label><input type="text" id="dsClassWord" maxlength="80" placeholder="woman"></div></div>
+        <label class="ds-check"><input type="checkbox" id="dsJsonl"> metadata.jsonl</label>
+        <label class="ds-check"><input type="checkbox" id="dsCsv"> captions.csv</label>
+        <label class="ds-check"><input type="checkbox" id="dsApprovedOnly"> Only approved captions</label>
+        <div class="ds-buttons"><button type="button" class="btn primary" id="dsExport">Export images + captions…</button></div>
+        <p class="help" id="dsExportHelp"></p>
+      </div>
     </aside>
     <div class="ds-workspace" id="dsDropzone">
       <div class="ds-stages" role="group" aria-label="Dataset stage"><button type="button" class="btn" id="dsPrepareTab" aria-pressed="true">1 · Prepare images</button><button type="button" class="btn" id="dsCaptionTab" aria-pressed="false">2 · Caption images</button></div>
-      <div class="ds-toolbar"><button type="button" class="btn" id="dsPrev" aria-label="Previous dataset image">←</button><span id="dsPosition">No images</span><button type="button" class="btn" id="dsNext" aria-label="Next dataset image">→</button><span class="ds-spacer"></span><button type="button" class="btn" id="dsRotateLeft" aria-label="Rotate left">↶</button><button type="button" class="btn" id="dsRotateRight" aria-label="Rotate right">↷</button><button type="button" class="btn" id="dsFlipH">Flip H</button><button type="button" class="btn" id="dsFlipV">Flip V</button><button type="button" class="btn" id="dsUndo">Undo</button><button type="button" class="link-btn" id="dsRemove">Remove image</button></div>
-      <div class="ds-preview" id="dsPreview"><canvas id="dsCanvas" tabindex="0" aria-label="Dataset image crop preview. Drag to draw a crop, move inside it or resize its corner handles."></canvas><div id="dsEmpty">Drop images here<br><span>or choose Add images</span></div></div>
+      <div class="ds-toolbar"><button type="button" class="btn" id="dsPrev" aria-label="Previous dataset image" title="Previous (A)">←</button><span id="dsPosition">No images</span><button type="button" class="btn" id="dsNext" aria-label="Next dataset image" title="Next (F)">→</button><span class="ds-spacer"></span><button type="button" class="btn" id="dsRotateLeft" aria-label="Rotate left" title="Rotate left (L)">↶</button><button type="button" class="btn" id="dsRotateRight" aria-label="Rotate right" title="Rotate right (R)">↷</button><button type="button" class="btn" id="dsFlipH" title="Flip horizontally (H)">Flip H</button><button type="button" class="btn" id="dsFlipV" title="Flip vertically (V)">Flip V</button><button type="button" class="btn" id="dsUndo" title="Undo (Ctrl/Cmd+Z)">Undo</button><button type="button" class="btn" id="dsGrid" aria-pressed="true" title="Rule-of-thirds grid (G)">Grid</button><button type="button" class="btn" id="dsFit" title="Fit the image (0). Scroll to zoom; hold Space or Alt and drag to pan.">Fit</button><span class="ds-zoom" id="dsZoom">100%</span><button type="button" class="link-btn" id="dsRemove">Remove image</button></div>
+      <details class="ds-shortcuts" id="dsShortcuts"><summary>Shortcuts</summary><div class="ds-keys"><span><kbd>A</kbd> / <kbd>F</kbd> previous / next</span><span><kbd>L</kbd> / <kbd>R</kbd> rotate</span><span><kbd>H</kbd> / <kbd>V</kbd> flip</span><span><kbd>G</kbd> grid</span><span><kbd>0</kbd> fit</span><span>Scroll: zoom</span><span><kbd>Space</kbd> or <kbd>Alt</kbd> + drag: pan</span><span>Arrows: move crop (Shift: 10 px)</span><span><kbd>Ctrl/Cmd</kbd> + <kbd>Z</kbd> undo</span><span><kbd>Esc</kbd> cancel a drag</span><span><kbd>Ctrl/Cmd</kbd> + <kbd>Enter</kbd> in a caption: approve and next</span><span><kbd>?</kbd> this list</span></div></details>
+      <div class="ds-preview" id="dsPreview"><canvas id="dsCanvas" tabindex="0" aria-label="Dataset image crop preview. Drag to draw a crop, move inside it or resize its corner and edge handles."></canvas><div id="dsEmpty">Drop images here<br><span>or choose Add images</span></div></div>
       <p class="help" id="dsDimensions">Source → Crop → Export dimensions appear here.</p><p class="help ds-error" id="dsValidation" role="status"></p>
-      <div class="ds-caption-editor" id="dsEditor" hidden><label class="label" for="dsCaptionText">Caption for this image</label><textarea id="dsCaptionText" rows="5" maxlength="100000" placeholder="Generate a caption or write your own."></textarea><div class="ds-buttons"><button type="button" class="btn" id="dsCopy">Copy caption</button><button type="button" class="btn" id="dsReviewed">Mark reviewed for this crop</button><span class="help" id="dsCaptionState"></span></div></div>
-      <div class="ds-queue" id="dsQueue" aria-label="Dataset image queue"></div><div class="ds-summary"><span id="dsSummary">No images loaded.</span><button type="button" class="btn" id="dsContinue">Continue to captions →</button></div><p class="help" id="dsStatus" role="status" aria-live="polite"></p>
+      <div class="ds-caption-editor" id="dsEditor" hidden><label class="label" for="dsCaptionText">Caption for this image</label><textarea id="dsCaptionText" rows="5" maxlength="100000" placeholder="Generate a caption or write your own."></textarea><div class="ds-buttons"><button type="button" class="btn" id="dsCopy">Copy caption</button><button type="button" class="btn" id="dsReviewed" title="Ctrl/Cmd+Enter approves and opens the next image">Approve</button><span class="help" id="dsCaptionState"></span></div></div>
+      <div class="ds-queue-bar"><label for="dsFilter">Show</label><select id="dsFilter"><option value="all">All images</option><option value="empty">Without caption</option><option value="review">To review</option><option value="approved">Approved</option><option value="failed">Failed</option><option value="warnings">With warnings</option><option value="size">Size problems</option></select></div>
+      <div class="ds-queue" id="dsQueue" aria-label="Dataset image queue"></div><div class="ds-summary"><span id="dsSummary">No images loaded.</span><button type="button" class="link-btn" id="dsRemoveSmall" hidden>Remove too small</button><button type="button" class="btn" id="dsContinue">Continue to captions →</button></div><p class="help" id="dsStatus" role="status" aria-live="polite"></p>
     </div>
   </div>
 </section>
@@ -680,6 +401,9 @@ dialog { max-height: calc(100dvh - 32px); overflow-y: auto; }
       <details class="sampling" id="samplingSection">
         <summary>Generation settings</summary>
         <p class="help">These choices control the language model that writes your prompts. Save applies them to future runs. Model and server support can vary.</p>
+        <label class="label" for="samplingProfile">Settings for</label>
+        <select id="samplingProfile"><option value="creative">Generate scenes (creative)</option><option value="precise">Image changes, rewrites, edits and captions (precise)</option></select>
+        <p class="help">Scenes need variety. Faithful work needs a calm model, so its own defaults use temperature 0.3 and no presence penalty.</p>
         <div class="sampling-grid">
           <div><label class="label" for="temperature">Temperature</label><input id="temperature" type="number" min="0" max="2" step="any" required><p class="help">0–2. Higher values allow more variation.</p></div>
           <div><label class="label" for="topP">Top-p</label><input id="topP" type="number" min="0" max="1" step="any" required><p class="help">Greater than 0, up to 1.</p></div>
@@ -707,6 +431,22 @@ dialog { max-height: calc(100dvh - 32px); overflow-y: auto; }
         <p class="help" id="folderPickerHelp" hidden>Selecting a folder fills its path. Press Save to apply it; Cancel keeps your saved settings.</p>
         <p class="help">Direct .txt children, up to 64 KB each. After Save, use Refresh presets or select a file again to load its latest content. Changing a file does not replace instructions already shown in your brief.</p>
       </details>
+      <details class="sampling" id="comfySection">
+        <summary>ComfyUI</summary>
+        <p class="help">Queue prompts straight into a ComfyUI workflow. In ComfyUI, use Export (API) and choose that file here. ComfyUI must be running.</p>
+        <label class="label" for="comfyUrl">ComfyUI address</label>
+        <input type="text" id="comfyUrl" placeholder="http://127.0.0.1:8188">
+        <label class="label" for="comfyWorkflow">API workflow file</label>
+        <div class="inline">
+          <input type="text" id="comfyWorkflow" placeholder="/path/to/workflow_api.json">
+          <button type="button" class="btn" data-choose-folder="workflow" aria-label="Choose ComfyUI workflow file" hidden>Choose file…</button>
+        </div>
+        <label class="label" for="comfyNode">Prompt input</label>
+        <div class="inline"><select id="comfyNode"></select><button type="button" class="btn" id="comfyDetect">Detect</button></div>
+        <label class="label" for="comfySeed">Seed</label>
+        <select id="comfySeed"><option value="random">New random seed for every prompt</option><option value="fixed">Keep the workflow's seed</option></select>
+        <p class="help" id="comfyStatus" role="status"></p>
+      </details>
       <div class="test-result" id="testResult" role="status" aria-live="polite"></div>
     </div>
     <div class="dlg-foot">
@@ -719,996 +459,20 @@ dialog { max-height: calc(100dvh - 32px); overflow-y: auto; }
   </form>
 </dialog>
 
-<script>
-(() => {
-  "use strict";
-  const $ = (sel, el = document) => el.querySelector(sel);
-  const $$ = (sel, el = document) => Array.from(el.querySelectorAll(sel));
-  const STORE = "scene-director-brief-v1";
+<dialog id="historyDialog" aria-labelledby="historyTitle">
+  <div class="dlg-head">
+    <h2 id="historyTitle">History</h2>
+    <button type="button" class="icon-btn" id="historyClose" aria-label="Close">&times;</button>
+  </div>
+  <div class="dlg-body">
+    <p class="help" id="historyFolder"></p>
+    <div><button type="button" class="btn" id="historyFavorites">Open starred prompts</button></div>
+    <div class="history-list" id="historyList"></div>
+  </div>
+</dialog>
 
-  const HINTS = {
-    target: {
-      "krea2": "Cohesive scenes with one clear visual treatment. Medium, light and material carry the look.",
-      "z-image-turbo": "Concrete scenes with clear layout and interaction. Your appearance and consistency choices stay in control."
-    },
-    creativity: {
-      grounded: "Familiar situations, observed with fresh detail.",
-      balanced: "A mix of familiar and less obvious ideas.",
-      adventurous: "Unexpected but believable ideas. Never fantasy unless you ask for it."
-    }
-  };
-  const CHIPS = {
-    direction: ["jobs", "sport", "hobbies", "household chores", "quiet daily moments", "night out", "travel", "crafts"],
-    style: ["documentary photography", "35mm film photo", "cinematic still", "studio portrait", "gouache illustration", "ink drawing", "3D render"],
-    interaction: ["colleagues sharing a task", "friends", "teacher and student", "rivals", "strangers"],
-    count: ["5", "10", "20", "50"]
-  };
-
-  const brief = {
-    workflow: "scenes", changes: "", editOutput: "full_prompt", preserve: "",
-    promptEditSource: "", promptEditChanges: "",
-    rewritePrompt: "", rewriteVision: false,
-    rewriteTextSystem: "", rewriteVisionSystem: "",
-    rewriteTextPreset: "builtin:faithful", rewriteVisionPreset: "builtin:vision",
-    target: "krea2", mode: "single", subject: "woman", lora: true,
-    first: "woman", firstLora: true, second: "man", secondLora: false, interaction: "",
-    direction: "jobs", count: 10, creativity: "balanced",
-    style: "", wishes: "", avoid: [], fixed: [], referenceMode: "inspiration", referenceNotes: ""
-  };
-  const reference = { data_url: null, name: "", loading: false, revision: 0 };
-  const REFERENCE_HINTS = {
-    inspiration: "Borrow a few distinctive visible qualities while letting the LLM invent substantially different scenes.",
-    composition: "Use the framing, viewpoint and relative positions. Adapt the scene to your subjects and direction.",
-    style: "Borrow medium, palette, textures and light; invent the scene content from your brief.",
-    scene: "Stay close to the visible activity, setting and arrangement, while varying the details you leave open."
-  };
-  let samplingDefaults = { temperature: 0.8, top_p: 0.95, top_k: 20, presence_penalty: 0.6, reasoning_effort: "none", chat_template_kwargs: { enable_thinking: false } };
-  const conn = { server: "lmstudio", api_url: "http://localhost:1234/v1", model: "", output_dir: "", preset_dir: "", vision_preset_dir: "", api_key: "", has_api_key: false, sampling: JSON.parse(JSON.stringify(samplingDefaults)) };
-  let promptLibrary = { text: [], vision: [] }, promptLibraryLoaded = false, presetRevision = 0;
-  let presets = { lmstudio: { url: "http://localhost:1234/v1" }, ollama: { url: "http://localhost:11434/v1" } };
-  let defaultOutputDir = "";
-  const run = { id: null, seq: 0, timer: null, prompts: [], file: null, total: 0, notices: [] };
-
-  // Storage ---------------------------------------------------------------
-  function loadBrief() {
-    try {
-      const saved = JSON.parse(localStorage.getItem(STORE) || "null");
-      if (saved && typeof saved === "object") {
-        for (const key of Object.keys(brief)) if (key in saved && typeof saved[key] === typeof brief[key]) brief[key] = saved[key];
-        if (!Array.isArray(brief.avoid)) brief.avoid = [];
-        if (!Array.isArray(brief.fixed)) brief.fixed = [];
-        if (!(brief.referenceMode in REFERENCE_HINTS)) brief.referenceMode = "inspiration";
-        if (!["scenes", "change_image", "rewrite", "edit_prompt"].includes(brief.workflow)) brief.workflow = "scenes";
-        if (!["full_prompt", "edit_instruction"].includes(brief.editOutput)) brief.editOutput = "full_prompt";
-      }
-    } catch (e) { /* storage unavailable: start with defaults */ }
-  }
-  function saveBrief() {
-    try { localStorage.setItem(STORE, JSON.stringify(brief)); } catch (e) { /* ignore */ }
-  }
-
-  // Brief form --------------------------------------------------------------
-  function renderBrief() {
-    for (const el of $$("[data-bind]")) {
-      const key = el.dataset.bind;
-      if (el.type === "checkbox") el.checked = !!brief[key];
-      else el.value = brief[key];
-    }
-    for (const name of ["workflow", "target", "mode", "creativity"]) {
-      const input = $(`input[name="${name}"][value="${brief[name]}"]`);
-      if (input) input.checked = true;
-    }
-    renderWorkflow(); renderMode(); renderHints(); renderChips(); renderAvoid(); renderFixed(); renderStart(); renderBadge(); renderReference();
-  }
-  function renderWorkflow() {
-    const editing = brief.workflow === "change_image";
-    const rewriting = brief.workflow === "rewrite";
-    const promptEditing = brief.workflow === "edit_prompt";
-    const imageFirst = editing || (rewriting && brief.rewriteVision);
-    const section = $("#referenceSection"), slot = $("#sourceImageSlot");
-    slot.hidden = !imageFirst;
-    if (imageFirst) {
-      if (section.parentElement !== slot) slot.appendChild(section);
-    } else if (section.previousElementSibling !== $("#referenceHome")) {
-      $("#referenceHome").after(section);
-    }
-    $("#sceneControls").hidden = editing || rewriting || promptEditing;
-    $("#changeControls").hidden = !editing;
-    $("#rewriteControls").hidden = !rewriting;
-    $("#rewriteModeControls").hidden = !rewriting;
-    $("#promptEditControls").hidden = !promptEditing;
-    $("#targetGroup").hidden = rewriting || promptEditing;
-    $("#more").hidden = editing || rewriting || promptEditing;
-    section.hidden = promptEditing || (rewriting && !brief.rewriteVision);
-    $("#referenceGuide").hidden = editing || rewriting;
-    $("#referenceTitle").textContent = editing ? "Source image" : "Reference image";
-    $("#referenceOptional").hidden = editing;
-    if (imageFirst) section.open = true;
-    $("#referenceOptional").hidden = imageFirst;
-    $("#workflowHint").textContent = promptEditing ? "Change only what you ask in an existing prompt. Keep everything else." : rewriting ? "Transform one prompt using your chosen system instructions, with optional Vision input." : editing ? "Upload an image and request specific changes. Keep the rest of the scene." : "Invent scenes from a creative brief, with an optional reference.";
-    $("#referenceHelp").textContent = (imageFirst ? "Required. " : "") + "PNG, JPEG or WebP, up to 5 MB. Requires a vision-capable language model. Sent to your selected model server only when you press Write; not saved in settings or prompt files.";
-    renderRewrite(); renderStart(); renderReference();
-  }
-  function rewriteKeys() {
-    return brief.rewriteVision ? ["rewriteVisionSystem", "rewriteVisionPreset", "vision"] : ["rewriteTextSystem", "rewriteTextPreset", "text"];
-  }
-  function renderRewrite() {
-    const [systemKey, presetKey, kind] = rewriteKeys();
-    const select = $("#rewritePreset");
-    select.textContent = "";
-    const custom = document.createElement("option"); custom.value = ""; custom.textContent = "Custom instructions"; select.appendChild(custom);
-    for (const item of promptLibrary[kind]) {
-      const option = document.createElement("option");
-      option.value = item.id; option.textContent = item.name + (item.source === "shared" ? " (shared)" : " (built-in)");
-      select.appendChild(option);
-    }
-    const chosen = promptLibrary[kind].find(item => item.id === brief[presetKey]);
-    if (chosen && !brief[systemKey]) brief[systemKey] = chosen.prompt;
-    if (promptLibraryLoaded && (!chosen || chosen.prompt !== brief[systemKey])) brief[presetKey] = "";
-    select.value = brief[presetKey];
-    $("#rewriteSystem").value = brief[systemKey];
-    $("#rewriteSourceOptional").hidden = !brief.rewriteVision;
-    $("#rewritePresetLabel").textContent = brief.rewriteVision ? "Vision system-prompt preset" : "System-prompt preset";
-  }
-  async function refreshPresets() {
-    const revision = ++presetRevision;
-    $("#presetStatus").textContent = "Reading preset files…";
-    try {
-      const library = await api("/api/presets");
-      if (revision !== presetRevision) return;
-      if (!library.ok) throw new Error(library.error || "Could not read the presets.");
-      promptLibrary = library;
-      promptLibraryLoaded = true;
-      // Keep the visible snapshot. Reselect a changed file to load its new text.
-      for (const kind of ["Text", "Vision"]) {
-        const items = promptLibrary[kind.toLowerCase()];
-        const key = "rewrite" + kind + "Preset", system = "rewrite" + kind + "System";
-        const chosen = items.find(item => item.id === brief[key]);
-        if (chosen && !brief[system]) brief[system] = chosen.prompt;
-      }
-      renderRewrite(); renderReference(); saveBrief();
-      $("#presetStatus").textContent = `${library.text.length} text and ${library.vision.length} Vision presets available. ` + (library.warnings || []).join(" ");
-    } catch (error) {
-      if (revision === presetRevision) $("#presetStatus").textContent = error.message || "Could not read the presets.";
-    }
-  }
-  $("#refreshPresets").addEventListener("click", refreshPresets);
-  $("#presetSettings").addEventListener("click", () => {
-    openDialog(); $("#presetFoldersSection").open = true; $("#presetDir").focus();
-  });
-  $("#rewritePreset").addEventListener("change", event => {
-    const [system, preset, kind] = rewriteKeys();
-    const item = promptLibrary[kind].find(item => item.id === event.target.value);
-    brief[preset] = item ? item.id : "";
-    if (item) brief[system] = item.prompt;
-    $("#rewriteSystem").value = brief[system]; changed();
-  });
-  $("#rewriteSystem").addEventListener("input", event => {
-    const [system, preset] = rewriteKeys();
-    brief[system] = event.target.value; brief[preset] = "";
-    $("#rewritePreset").value = ""; changed();
-  });
-  $("#loadPresetFile").addEventListener("click", () => $("#presetFile").click());
-  $("#presetFile").addEventListener("change", async event => {
-    const file = event.target.files[0]; if (!file) return;
-    const [system, preset] = rewriteKeys();
-    try {
-      if (!/\.txt$/i.test(file.name) || file.size > 65536) throw new Error("Choose one UTF-8 .txt preset of up to 64 KB.");
-      const content = new TextDecoder("utf-8", { fatal: true }).decode(await file.arrayBuffer()).trim();
-      if (!content) throw new Error("This preset is empty.");
-      brief[system] = content; brief[preset] = "";
-      renderRewrite(); changed(); $("#presetStatus").textContent = `Loaded ${file.name} as custom instructions. The original file is unchanged.`;
-    } catch (error) { $("#presetStatus").textContent = error.message || "Could not read this UTF-8 preset."; }
-    finally { event.target.value = ""; }
-  });
-  function renderMode() {
-    $("#singleFields").hidden = brief.mode !== "single";
-    $("#pairFields").hidden = brief.mode !== "two";
-  }
-  function renderHints() {
-    $("#targetHint").textContent = HINTS.target[brief.target];
-    $("#surpriseHint").textContent = HINTS.creativity[brief.creativity];
-  }
-  function renderChips() {
-    for (const box of $$("[data-chips]")) {
-      const key = box.dataset.chips;
-      box.textContent = "";
-      for (const value of CHIPS[key]) {
-        const chip = document.createElement("button");
-        chip.type = "button"; chip.className = "chip"; chip.textContent = value;
-        chip.setAttribute("aria-pressed", String(String(brief[key]).trim().toLowerCase() === value));
-        chip.addEventListener("click", () => {
-          brief[key] = key === "count" ? Number(value) : value;
-          const input = $(`[data-bind="${key}"]`);
-          if (input) input.value = brief[key];
-          changed();
-        });
-        box.appendChild(chip);
-      }
-    }
-  }
-  function renderStart() {
-    if (brief.workflow === "edit_prompt") { $("#startBtn").textContent = "Apply prompt changes"; return; }
-    if (brief.workflow === "rewrite") { $("#startBtn").textContent = "Rewrite prompt"; return; }
-    if (brief.workflow === "change_image") {
-      $("#startBtn").textContent = brief.editOutput === "edit_instruction" ? "Write edit instruction" : "Write revised prompt";
-      return;
-    }
-    const n = clampCount(brief.count);
-    $("#startBtn").textContent = `Write ${n} prompt${n === 1 ? "" : "s"}`;
-  }
-  function renderBadge() {
-    const set = [brief.style.trim(), brief.wishes.trim(), brief.avoid.length, brief.fixed.some(f => f.name.trim() && f.value.trim())].filter(Boolean).length;
-    $("#moreBadge").textContent = set ? `${set} set` : "";
-  }
-  function clampCount(value) {
-    const n = Math.round(Number(value));
-    return Number.isFinite(n) ? Math.min(500, Math.max(1, n)) : 10;
-  }
-  function changed() { renderChips(); renderStart(); renderBadge(); renderReference(); saveBrief(); }
-
-  function renderReference() {
-    $("#referenceOptions").hidden = !reference.data_url;
-    $("#referenceBadge").textContent = reference.data_url ? "Attached" : "";
-    $("#referenceName").textContent = reference.name;
-    $("#dropTitle").textContent = reference.data_url ? "Drop another image to replace" : "Drop an image here";
-    $("#referenceModeHint").textContent = REFERENCE_HINTS[brief.referenceMode];
-    if (reference.data_url) {
-      if ($("#referencePreview").getAttribute("src") !== reference.data_url) $("#referencePreview").src = reference.data_url;
-    }
-    else $("#referencePreview").removeAttribute("src");
-    const rewriting = brief.workflow === "rewrite";
-    $("#startBtn").disabled = !!run.id || (brief.workflow !== "edit_prompt" && reference.loading) ||
-      (brief.workflow === "edit_prompt" && (!brief.promptEditSource.trim() || !brief.promptEditChanges.trim())) ||
-      (brief.workflow === "change_image" && (!reference.data_url || !brief.changes.trim())) ||
-      (rewriting && (!brief[rewriteKeys()[0]].trim() || (brief.rewriteVision ? !reference.data_url : !brief.rewritePrompt.trim())));
-  }
-  async function loadReferenceFiles(files) {
-    const items = Array.from(files || []);
-    if (items.length !== 1) {
-      reference.revision++; reference.loading = false;
-      $("#referenceStatus").textContent = "Choose or drop one image file at a time.";
-      $("#referenceFile").value = "";
-      renderReference(); return;
-    }
-    const file = items[0];
-    const revision = ++reference.revision;
-    const extension = (file.name || "").split(".").pop().toLowerCase();
-    const mime = file.type === "image/jpg" ? "image/jpeg" : (file.type || ({png:"image/png",jpg:"image/jpeg",jpeg:"image/jpeg",webp:"image/webp"})[extension]);
-    if (!["image/png", "image/jpeg", "image/webp"].includes(mime) || !file.size || file.size > 5 * 1024 * 1024) {
-      $("#referenceStatus").textContent = "Choose a PNG, JPEG or WebP image of 5 MB or less.";
-      $("#referenceFile").value = "";
-      reference.loading = false; renderReference();
-      return;
-    }
-    reference.loading = true; renderReference();
-    $("#referenceStatus").textContent = "Loading image…";
-    try {
-      const data = await new Promise((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = () => resolve(reader.result);
-        reader.onerror = () => reject(new Error("Could not read the image. Select it again."));
-        reader.readAsDataURL(file.type === mime ? file : new Blob([file], {type:mime}));
-      });
-      const image = new Image(); image.src = data; await image.decode();
-      if (revision !== reference.revision) return;
-      reference.data_url = data; reference.name = file.name;
-      $("#referenceStatus").textContent = brief.workflow === "change_image" ? "Source image ready. Describe your changes, then press Write." : "Image ready. It will guide the next run.";
-      checkConnection();
-    } catch (error) {
-      if (revision !== reference.revision) return;
-      $("#referenceStatus").textContent = "Could not decode this image. Choose another PNG, JPEG or WebP file.";
-      $("#referenceFile").value = "";
-    } finally {
-      if (revision === reference.revision) { reference.loading = false; renderReference(); }
-    }
-  }
-  $("#referenceFile").addEventListener("change", (event) => {
-    if (event.target.files.length) loadReferenceFiles(event.target.files);
-  });
-  const dropzone = $("#imageDropzone");
-  let dragDepth = 0;
-  for (const eventName of ["dragenter", "dragover", "dragleave", "drop"]) {
-    dropzone.addEventListener(eventName, (event) => {
-      event.preventDefault(); event.stopPropagation();
-      if (eventName === "dragenter") { dragDepth++; dropzone.classList.add("drag-over"); }
-      if (eventName === "dragover" && event.dataTransfer) event.dataTransfer.dropEffect = "copy";
-      if (eventName === "dragleave") {
-        dragDepth = Math.max(0, dragDepth - 1);
-        if (!dragDepth) dropzone.classList.remove("drag-over");
-      }
-      if (eventName === "drop") {
-        dragDepth = 0; dropzone.classList.remove("drag-over");
-        $("#referenceFile").value = "";
-        loadReferenceFiles(event.dataTransfer ? event.dataTransfer.files : []);
-      }
-    });
-  }
-  $("#removeReference").addEventListener("click", () => {
-    reference.revision++; reference.data_url = null; reference.name = ""; reference.loading = false;
-    $("#referenceFile").value = "";
-    $("#referenceStatus").textContent = brief.workflow === "change_image" ? "Source image removed. Upload an image to continue." : "Image removed. The next run will use the text brief only.";
-    renderReference(); checkConnection();
-  });
-
-  for (const el of $$("[data-bind]")) {
-    el.addEventListener("input", () => {
-      const key = el.dataset.bind;
-      brief[key] = el.type === "checkbox" ? el.checked : (key === "count" ? el.value : el.value);
-      if (key === "rewriteVision") { renderWorkflow(); checkConnection(); }
-      changed();
-    });
-  }
-  $("#count").addEventListener("change", () => { brief.count = clampCount(brief.count); $("#count").value = brief.count; changed(); });
-  for (const name of ["workflow", "target", "mode", "creativity"]) {
-    for (const input of $$(`input[name="${name}"]`)) {
-      input.addEventListener("change", () => {
-        brief[name] = input.value; renderWorkflow(); renderMode(); renderHints(); saveBrief();
-        if (name === "workflow") checkConnection();
-        if (!run.id && !run.prompts.length) renderEmpty();
-      });
-    }
-  }
-  for (const button of $$("[data-step]")) {
-    button.addEventListener("click", () => {
-      brief.count = clampCount(clampCount(brief.count) + Number(button.dataset.step));
-      $("#count").value = brief.count; changed();
-    });
-  }
-
-  // Avoid tags
-  function renderAvoid() {
-    const box = $("#avoidTags"), input = $("#avoidInput");
-    for (const tag of $$(".tag", box)) tag.remove();
-    brief.avoid.forEach((item, index) => {
-      const tag = document.createElement("span");
-      tag.className = "tag"; tag.textContent = item;
-      const remove = document.createElement("button");
-      remove.type = "button"; remove.textContent = "×"; remove.setAttribute("aria-label", `Remove ${item}`);
-      remove.addEventListener("click", () => { brief.avoid.splice(index, 1); renderAvoid(); changed(); input.focus(); });
-      tag.appendChild(remove);
-      box.insertBefore(tag, input);
-    });
-  }
-  function addAvoid(text) {
-    for (const part of text.split(/[,;\n]/)) {
-      const item = part.trim();
-      if (item && !brief.avoid.some(a => a.toLowerCase() === item.toLowerCase())) brief.avoid.push(item);
-    }
-    renderAvoid(); changed();
-  }
-  $("#avoidInput").addEventListener("keydown", (e) => {
-    const input = e.currentTarget;
-    if ((e.key === "Enter" || e.key === ",") && input.value.trim()) { e.preventDefault(); addAvoid(input.value); input.value = ""; }
-    else if (e.key === "Enter") e.preventDefault();
-    else if (e.key === "Backspace" && !input.value && brief.avoid.length) { brief.avoid.pop(); renderAvoid(); changed(); }
-  });
-  $("#avoidInput").addEventListener("blur", (e) => { if (e.target.value.trim()) { addAvoid(e.target.value); e.target.value = ""; } });
-  $("#avoidTags").addEventListener("click", (e) => { if (e.target.id === "avoidTags") $("#avoidInput").focus(); });
-
-  // Fixed choices
-  function renderFixed() {
-    const list = $("#fixedList");
-    list.textContent = "";
-    brief.fixed.forEach((row, index) => {
-      const wrap = document.createElement("div");
-      wrap.className = "fixed-row";
-      const name = document.createElement("input");
-      name.type = "text"; name.placeholder = "setting"; name.value = row.name; name.setAttribute("aria-label", "Choice name");
-      const eq = document.createElement("span"); eq.className = "eq"; eq.textContent = "=";
-      const value = document.createElement("input");
-      value.type = "text"; value.placeholder = "indoors"; value.value = row.value; value.setAttribute("aria-label", "Choice value");
-      const remove = document.createElement("button");
-      remove.type = "button"; remove.className = "icon-btn"; remove.textContent = "×"; remove.setAttribute("aria-label", "Remove this choice");
-      name.addEventListener("input", () => { row.name = name.value; changed(); });
-      value.addEventListener("input", () => { row.value = value.value; changed(); });
-      remove.addEventListener("click", () => { brief.fixed.splice(index, 1); renderFixed(); changed(); });
-      wrap.append(name, eq, value, remove);
-      list.appendChild(wrap);
-    });
-  }
-  $("#addFixed").addEventListener("click", () => {
-    brief.fixed.push({ name: "", value: "" });
-    renderFixed(); changed();
-    const inputs = $$("#fixedList input");
-    inputs[inputs.length - 2].focus();
-  });
-
-  // Connection ------------------------------------------------------------------
-  async function api(path, body) {
-    const options = body === undefined ? {} : { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) };
-    const response = await fetch(path, options);
-    return response.json();
-  }
-  function setPill(kind, text) {
-    $("#connDot").className = "dot" + (kind ? " " + kind : "");
-    $("#connText").textContent = text;
-  }
-  function serverName(server) {
-    return server === "lmstudio" ? "LM Studio" : server === "ollama" ? "Ollama" : "your server";
-  }
-  function referenceForRun() {
-    return brief.workflow !== "edit_prompt" && !!reference.data_url && (brief.workflow !== "rewrite" || brief.rewriteVision);
-  }
-  async function checkConnection() {
-    setPill("", "Checking connection");
-    try {
-      const result = await api("/api/models", { api_url: conn.api_url, api_key: conn.api_key, require_vision: referenceForRun() });
-      if (!result.ok) {
-        setPill("err", /API key/.test(result.error || "") ? "API key needed. Click to add it" : "Not connected. Set up the connection");
-        return result;
-      }
-      const model = conn.model || result.auto;
-      const selected = result.models.find(m => m.id === model || m.key === model);
-      if (referenceForRun() && selected && selected.vision === false) {
-        setPill("err", "Reference image needs a vision model. Click to choose one");
-        return result;
-      }
-      if (model) setPill("ok", `${model} on ${serverName(result.server === "lmstudio" ? "lmstudio" : conn.server)}`);
-      else setPill("err", referenceForRun() ? "No vision model ready. Click to choose one" : (result.note ? "No model loaded" : "Connected, no model found"));
-      return result;
-    } catch (e) {
-      setPill("err", "Scene Director is not running");
-      return { ok: false, error: "The Scene Director window was closed. Start it again." };
-    }
-  }
-
-  const dialog = $("#connDialog");
-  function fillModels(result, selected) {
-    const select = $("#modelSelect");
-    select.textContent = "";
-    const auto = document.createElement("option");
-    auto.value = ""; auto.textContent = result && result.auto ? `Automatic (${result.auto})` : "Automatic (loaded model)";
-    select.appendChild(auto);
-    const models = (result && result.models) || [];
-    for (const m of models) {
-      const option = document.createElement("option");
-      option.value = m.id;
-      const capability = m.vision === true ? " · vision" : m.vision === false ? " · text only" : "";
-      option.textContent = m.id + capability + (m.loaded === false ? " (not loaded)" : "");
-      select.appendChild(option);
-    }
-    if (selected && !models.some(m => m.id === selected)) {
-      const option = document.createElement("option");
-      option.value = selected; option.textContent = selected; select.appendChild(option);
-    }
-    select.value = selected || "";
-  }
-  function showTest(result) {
-    const box = $("#testResult");
-    if (!result.ok) { box.className = "test-result err"; box.textContent = result.error; return; }
-    const loaded = result.models.filter(m => m.loaded).length;
-    box.className = "test-result " + (result.auto ? "ok" : "err");
-    if (result.auto) {
-      box.textContent = result.server === "lmstudio"
-        ? `Connected to LM Studio. ${loaded} model${loaded === 1 ? "" : "s"} loaded. Automatic uses ${result.auto}.`
-        : `Connected. ${result.models.length} model${result.models.length === 1 ? "" : "s"} available.`;
-    } else box.textContent = result.note || "Connected, but the server lists no chat model.";
-  }
-  async function refreshDialogModels() {
-    $("#testResult").className = "test-result"; $("#testResult").textContent = "Checking…";
-    const draft = { api_url: $("#apiUrl").value.trim(), api_key: $("#apiKey").value.trim(), require_vision: referenceForRun() };
-    try {
-      const result = await api("/api/models", draft);
-      fillModels(result.ok ? result : null, $("#modelSelect").value);
-      showTest(result);
-    } catch (e) { showTest({ ok: false, error: "Scene Director is not running. Start it again." }); }
-  }
-  function renderKeyField() {
-    $("#apiKey").value = "";
-    $("#apiKey").placeholder = conn.has_api_key ? "A key is saved. Paste a new one to replace it." : "Paste your API key";
-    $("#forgetKey").hidden = !conn.has_api_key;
-  }
-  function fillSampling(values) {
-    for (const [id, key] of [["temperature", "temperature"], ["topP", "top_p"], ["topK", "top_k"], ["presencePenalty", "presence_penalty"]]) $("#" + id).value = values[key];
-    $("#reasoningEffort").value = values.reasoning_effort == null ? "default" : values.reasoning_effort;
-    const thinking = values.chat_template_kwargs.enable_thinking;
-    $("#templateThinking").value = thinking == null ? "default" : String(thinking);
-  }
-  function samplingValues() {
-    const values = {};
-    for (const [id, key] of [["temperature", "temperature"], ["topP", "top_p"], ["topK", "top_k"], ["presencePenalty", "presence_penalty"]]) {
-      const field = $("#" + id);
-      if (!field.value.trim() || !field.checkValidity()) {
-        $("#samplingSection").open = true;
-        field.reportValidity();
-        throw new Error("Check the value for " + field.previousElementSibling.textContent + ".");
-      }
-      values[key] = Number(field.value);
-    }
-    const effort = $("#reasoningEffort").value;
-    values.reasoning_effort = effort === "default" ? null : effort;
-    const thinking = $("#templateThinking").value;
-    values.chat_template_kwargs = { enable_thinking: thinking === "default" ? null : thinking === "true" };
-    return values;
-  }
-  $("#reasoningEffort").addEventListener("change", () => {
-    const effort = $("#reasoningEffort").value;
-    if (effort !== "default" && $("#templateThinking").value !== "default") $("#templateThinking").value = effort === "none" ? "false" : "true";
-  });
-  $("#templateThinking").addEventListener("change", () => {
-    const thinking = $("#templateThinking").value, effort = $("#reasoningEffort").value;
-    if (thinking === "true" && effort === "none") $("#reasoningEffort").value = "default";
-    if (thinking === "false" && effort !== "default" && effort !== "none") $("#reasoningEffort").value = "none";
-  });
-  $("#resetSampling").addEventListener("click", () => {
-    fillSampling(samplingDefaults);
-    $("#testResult").className = "test-result";
-    $("#testResult").textContent = "Default generation values restored in this form. Press Save to apply them.";
-  });
-  function openDialog() {
-    $(`input[name="server"][value="${conn.server}"]`).checked = true;
-    $("#apiUrl").value = conn.api_url; $("#outputDir").value = conn.output_dir;
-    $("#presetDir").value = conn.preset_dir || "";
-    $("#visionPresetDir").value = conn.vision_preset_dir || "";
-    renderKeyField();
-    fillSampling(conn.sampling);
-    fillModels(null, conn.model);
-    $("#testResult").textContent = "";
-    dialog.showModal();
-    refreshDialogModels();
-  }
-  $("#connPill").addEventListener("click", openDialog);
-  for (const input of $$('input[name="server"]')) {
-    input.addEventListener("change", () => {
-      if (presets[input.value]) $("#apiUrl").value = presets[input.value].url;
-      if (input.value !== "custom") refreshDialogModels();
-      else $("#apiUrl").focus();
-    });
-  }
-  $("#apiUrl").addEventListener("input", () => {
-    const url = $("#apiUrl").value.trim();
-    const match = Object.entries(presets).find(([, p]) => p.url === url);
-    $(`input[name="server"][value="${match ? match[0] : "custom"}"]`).checked = true;
-  });
-  $("#refreshModels").addEventListener("click", refreshDialogModels);
-  $("#testConn").addEventListener("click", refreshDialogModels);
-  $("#connClose").addEventListener("click", () => dialog.close());
-  $("#connCancel").addEventListener("click", () => dialog.close());
-  $("#dlgOpenFolder").addEventListener("click", () => openFolder($("#outputDir").value.trim() || defaultOutputDir, $("#testResult")));
-  function dialogValues() {
-    return {
-      server: $('input[name="server"]:checked').value,
-      api_url: $("#apiUrl").value.trim(),
-      api_key: $("#apiKey").value.trim(),
-      model: $("#modelSelect").value,
-      output_dir: $("#outputDir").value.trim() || defaultOutputDir,
-      preset_dir: $("#presetDir").value.trim(), vision_preset_dir: $("#visionPresetDir").value.trim(),
-      sampling: samplingValues()
-    };
-  }
-  async function saveConnection(extra) {
-    let next;
-    try { next = Object.assign(dialogValues(), extra || {}); }
-    catch (error) { showTest({ ok: false, error: error.message }); return null; }
-    if (!next.api_url) { showTest({ ok: false, error: "Enter a server address." }); return null; }
-    try {
-      const result = await api("/api/settings", next);
-      if (!result.ok) { showTest(result); return null; }
-      Object.assign(conn, result.settings, { api_key: "" });  // the server keeps the key from now on
-      refreshPresets();
-      return result.settings;
-    } catch (e) {
-      showTest({ ok: false, error: "Could not save. Is Scene Director still running?" });
-      return null;
-    }
-  }
-  $("#connSave").addEventListener("click", async () => {
-    if (await saveConnection()) { dialog.close(); checkConnection(); }
-  });
-  // Enter in any field saves, like pressing Save.
-  $("#connForm").addEventListener("submit", (e) => { e.preventDefault(); $("#connSave").click(); });
-  $("#connForm").addEventListener("keydown", (e) => {
-    if (e.key === "Enter" && e.target.tagName === "INPUT") { e.preventDefault(); $("#connSave").click(); }
-  });
-  $("#forgetKey").addEventListener("click", async () => {
-    if (await saveConnection({ api_key: "", forget_api_key: true })) {
-      renderKeyField();
-      const box = $("#testResult");
-      box.className = "test-result"; box.textContent = "The saved key is removed.";
-    }
-  });
-
-  async function openFolder(path, target) {
-    try {
-      const result = await api("/api/open-folder", { path });
-      if (!result.ok) {
-        if (target) { target.className = "test-result err"; target.textContent = result.error; } else setStatus(result.error);
-      }
-    } catch (e) { setStatus("Scene Director is not running. Start it again."); }
-  }
-  $("#openFolder").addEventListener("click", () => openFolder(run.file || conn.output_dir || defaultOutputDir));
-
-  // Script page ---------------------------------------------------------------
-  const page = $("#page");
-  function el(tag, cls, text) {
-    const node = document.createElement(tag);
-    if (cls) node.className = cls;
-    if (text !== undefined) node.textContent = text;
-    return node;
-  }
-  function renderEmpty() {
-    page.textContent = "";
-    page.appendChild(el("p", "transition", "FADE IN:"));
-    const empty = el("div", "empty");
-    const editing = brief.workflow === "change_image";
-    const rewriting = brief.workflow === "rewrite";
-    const promptEditing = brief.workflow === "edit_prompt";
-    empty.appendChild(el("p", "", promptEditing ? "Your edited prompt appears here." : rewriting ? "Your rewritten prompt appears here." : editing ? "Your revised prompt or edit instruction appears here." : "Your prompts appear here as they are written, one scene at a time."));
-    empty.appendChild(el("p", "muted", promptEditing ? "Paste the original prompt, describe only the changes and press Apply prompt changes." : rewriting ? "Paste a prompt, choose system instructions and press Rewrite prompt. Enable Vision to use an image." : editing ? "Upload a source image and describe the changes. Unrequested details stay the same." : "Pick a subject and a direction, then press Write. Anything you leave blank, the model invents."));
-    empty.appendChild(el("p", "muted", "Make sure a model is loaded in LM Studio and its server is running. The connection status sits at the top of this page."));
-    page.appendChild(empty);
-  }
-  function setStatus(text) { $("#status").textContent = text; }
-  function setProgress(done, total) {
-    $("#progress").style.width = total ? `${Math.min(100, (done / total) * 100)}%` : "0";
-  }
-  async function copyText(text, button, label) {
-    try { await navigator.clipboard.writeText(text); }
-    catch (e) {
-      const area = el("textarea"); area.value = text; document.body.appendChild(area); area.select();
-      try { document.execCommand("copy"); } catch (err) { /* nothing else to try */ }
-      area.remove();
-    }
-    if (button) { button.textContent = "Copied"; setTimeout(() => { button.textContent = label; }, 1400); }
-  }
-  // Live view: the model's reply while it is being written --------------------
-  function decodePartial(raw) {
-    raw = raw.replace(/\\(u[0-9a-fA-F]{0,3})?$/, "");
-    try { return JSON.parse('"' + raw + '"'); }
-    catch (e) { return raw.replace(/\\n/g, " ").replace(/\\"/g, '"'); }
-  }
-  function partialList(text, key) {
-    // Read the strings of "key": [ ... ] from JSON that is still being written.
-    const match = new RegExp('"' + key + '"\\s*:\\s*\\[').exec(text);
-    const items = [];
-    if (!match) return null;
-    let i = match.index + match[0].length;
-    while (i < text.length) {
-      while (i < text.length && /[\s,]/.test(text[i])) i++;
-      if (i >= text.length || text[i] !== '"') break;
-      i++;
-      let raw = "", closed = false;
-      while (i < text.length) {
-        const c = text[i];
-        if (c === "\\") { raw += text.slice(i, i + 2); i += 2; continue; }
-        if (c === '"') { closed = true; i++; break; }
-        raw += c; i++;
-      }
-      items.push({ text: decodePartial(raw), done: closed });
-      if (!closed) break;
-    }
-    return items;
-  }
-  function liveParts() {
-    let content = run.live.content, thinking = run.live.reasoning;
-    const think = /<think>([\s\S]*?)(<\/think>|$)/i.exec(content);
-    if (think) { thinking += think[1]; content = content.replace(think[0], ""); }
-    if (["rewrite", "edit_prompt"].includes(run.workflow)) return { content: content.trim(), thinking: thinking.trim(), ideas: null, prompts: null };
-    const ideas = partialList(content, "ideas");
-    const prompts = partialList(content, "prompts");
-    return { content: content.trim(), thinking: thinking.trim(), ideas, prompts };
-  }
-  function clearLive() {
-    run.live = null;
-    const block = $("#live");
-    if (block) block.remove();
-  }
-  function renderLive() {
-    if (!run.live) return;
-    const nearBottom = page.scrollHeight - page.scrollTop - page.clientHeight < 120;
-    let block = $("#live");
-    if (!block) {
-      if (run.prompts.length === 0) {
-        page.textContent = "";
-        page.appendChild(el("p", "transition", "FADE IN:"));
-      }
-      block = el("section", "live"); block.id = "live";
-      block.setAttribute("aria-label", "Model output, live");
-      page.appendChild(block);
-    }
-    const live = run.live, parts = liveParts();
-    block.textContent = "";
-    const head = el("div", "live-head");
-    head.appendChild(el("span", "pulse"));
-    const range = live.first === live.last ? `prompt ${live.first}` : `prompts ${live.first} to ${live.last}`;
-    const phase = run.workflow === "edit_prompt" && parts.content ? "Editing" : run.workflow === "rewrite" && parts.content ? "Rewriting" : parts.prompts && parts.prompts.length ? "Writing" : parts.ideas && parts.ideas.length ? "Choosing scenes for" : parts.thinking ? "Thinking about" : "Waiting for the model on";
-    head.appendChild(el("span", "", `${phase} ${range}${live.attempt > 1 ? " (retry)" : ""}`));
-    const seconds = Math.round((Date.now() - live.started) / 1000);
-    head.appendChild(el("span", "elapsed", seconds >= 60 ? `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}` : `${seconds} s`));
-    block.appendChild(head);
-
-    if (parts.thinking && !(parts.prompts && parts.prompts.length)) {
-      const tail = parts.thinking.length > 420 ? "…" + parts.thinking.slice(-420) : parts.thinking;
-      const p = el("p", "thinking");
-      p.appendChild(el("b", "", "Thinking"));
-      p.appendChild(document.createTextNode(tail));
-      block.appendChild(p);
-    }
-    const ideas = parts.ideas || [], prompts = parts.prompts || [];
-    const rows = Math.max(ideas.length, prompts.length);
-    if (rows) {
-      for (let k = 0; k < rows; k++) {
-        const scene = el("article", "scene draft");
-        scene.appendChild(el("span", "scene-no", String(live.first + k)));
-        if (ideas[k]) scene.appendChild(el("h3", "slug", ideas[k].text.replace(/\.$/, "")));
-        const body = el("p", "action", prompts[k] ? prompts[k].text : "");
-        if (prompts[k] && !prompts[k].done && k === prompts.length - 1) body.appendChild(el("span", "caret"));
-        scene.appendChild(body);
-        block.appendChild(scene);
-      }
-    } else if (parts.content && (["rewrite", "edit_prompt"].includes(run.workflow) || (!parts.content.startsWith("{") && !parts.content.startsWith("```")))) {
-      // A model that ignores the JSON format: show its raw text.
-      const scene = el("article", "scene draft");
-      const body = el("p", "action", ["rewrite", "edit_prompt"].includes(run.workflow) ? parts.content : parts.content.slice(-1600));
-      if (run.workflow === "edit_prompt") body.classList.add("prompt-edit-text");
-      body.appendChild(el("span", "caret"));
-      scene.appendChild(body);
-      block.appendChild(scene);
-    }
-    if (nearBottom) page.scrollTop = page.scrollHeight;
-  }
-
-  function addScene(event) {
-    if (run.live) clearLive();
-    if (run.prompts.length === 0) page.textContent = "";
-    if (!page.querySelector(".transition")) page.appendChild(el("p", "transition", "FADE IN:"));
-    run.prompts.push(event.text);
-    const scene = el("article", "scene new");
-    scene.appendChild(el("span", "scene-no", String(event.index)));
-    if (event.idea) scene.appendChild(el("h3", "slug", event.idea.replace(/\.$/, "")));
-    scene.appendChild(el("p", "action" + (run.workflow === "edit_prompt" ? " prompt-edit-text" : ""), event.text));
-    const foot = el("div", "scene-foot");
-    foot.appendChild(el("span", "", `${event.words || event.text.split(/\s+/).length} words`));
-    const copy = el("button", "copy", "Copy");
-    copy.type = "button";
-    copy.addEventListener("click", () => copyText(event.text, copy, "Copy"));
-    foot.appendChild(copy);
-    if (run.workflow === "edit_prompt") {
-      const reuse = el("button", "copy", "Use as input");
-      reuse.type = "button";
-      reuse.addEventListener("click", () => {
-        if (run.id) return;
-        brief.workflow = "edit_prompt";
-        $('input[name="workflow"][value="edit_prompt"]').checked = true;
-        brief.promptEditSource = event.text;
-        $("#promptEditSource").value = event.text;
-        brief.promptEditChanges = ""; $("#promptEditChanges").value = "";
-        renderWorkflow(); changed(); checkConnection(); $("#promptEditChanges").focus();
-      });
-      foot.appendChild(reuse);
-    }
-    scene.appendChild(foot);
-    page.appendChild(scene);
-    if (page.scrollHeight > page.clientHeight) page.scrollTo({ top: page.scrollHeight, behavior: "smooth" });
-    $("#copyAll").disabled = false;
-  }
-  function addError(message, saved, file) {
-    const box = el("div", "error-box");
-    box.appendChild(el("strong", "", "The run stopped"));
-    box.appendChild(el("p", "", message));
-    if (saved) box.appendChild(el("p", "", `${saved} prompt${saved === 1 ? " was" : "s were"} saved to ${file}.`));
-    if (run.prompts.length === 0) page.textContent = "";
-    page.prepend(box);
-    page.scrollTo({ top: 0, behavior: "smooth" });
-  }
-  function addNotice(event) {
-    run.notices.push(event);
-    const log = $("#log");
-    const line = el("p", event.level === "warn" ? "warn" : "", event.message);
-    log.appendChild(line);
-    const toggle = $("#logToggle");
-    toggle.hidden = false;
-    toggle.textContent = log.hidden ? `Show details (${run.notices.length})` : "Hide details";
-  }
-  $("#logToggle").addEventListener("click", () => {
-    const log = $("#log");
-    log.hidden = !log.hidden;
-    $("#logToggle").textContent = log.hidden ? `Show details (${run.notices.length})` : "Hide details";
-  });
-  $("#copyAll").addEventListener("click", () => copyText(run.prompts.join("\n"), $("#copyAll"), "Copy all"));
-
-  function setRunning(active) {
-    $("#startBtn").disabled = active;
-    if (active) $("#startBtn").textContent = "Writing…"; else { renderStart(); renderReference(); }
-    for (const input of $$('input[name="workflow"]')) input.disabled = active;
-    $("#stopBtn").hidden = !active;
-    $("#stopBtn").disabled = false;
-    $("#kbdHint").hidden = active;
-  }
-  function finish() {
-    clearLive();
-    clearInterval(run.timer); run.timer = null; run.id = null;
-    setRunning(false);
-  }
-  function handle(event) {
-    switch (event.type) {
-      case "start":
-        run.total = event.count;
-        run.workflow = event.workflow;
-        $("#meta").textContent = event.workflow === "edit_prompt" ? `Edited prompt, written by ${event.model}` : event.workflow === "rewrite" ? `Rewritten prompt, written by ${event.model}` : event.workflow === "change_image" ? `${event.output_kind === "edit_instruction" ? "Edit instruction" : "Revised prompt"} for ${event.target_label}, written by ${event.model}` : `${event.count} for ${event.target_label}, written by ${event.model}`;
-        setStatus(`Writing… the first batch can take a minute on a local model.`);
-        break;
-      case "batch":
-        clearLive();
-        run.live = { first: event.first, last: event.last, attempt: event.attempt, content: "", reasoning: "", started: Date.now() };
-        renderLive();
-        break;
-      case "delta":
-        if (run.live) {
-          run.live[event.channel === "reasoning" ? "reasoning" : "content"] += event.text;
-        }
-        break;
-      case "prompt":
-        addScene(event);
-        setProgress(run.prompts.length, run.total);
-        setStatus(`${run.prompts.length} of ${run.total} written`);
-        break;
-      case "notice": addNotice(event); break;
-      case "log": addNotice({ level: "info", message: event.message }); break;
-      case "saved": run.file = event.file; break;
-      case "done":
-        run.file = event.file;
-        page.appendChild(el("p", "transition out", "FADE OUT."));
-        page.appendChild(el("p", "saved-line", `Saved to ${event.file}`));
-        setStatus(`Done. ${event.count} prompt${event.count === 1 ? "" : "s"} saved.`);
-        setProgress(1, 1);
-        finish();
-        break;
-      case "stopped":
-        if (event.file) run.file = event.file;
-        setStatus(event.saved ? `Stopped. ${event.saved} prompts saved.` : "Stopped before the first batch was finished.");
-        finish();
-        break;
-      case "error":
-        addError(event.message, event.saved, event.file);
-        setStatus(event.saved ? `Stopped with an error. ${event.saved} prompts saved.` : "Stopped with an error.");
-        finish();
-        break;
-    }
-  }
-  async function poll() {
-    if (!run.id || run.polling) return;
-    run.polling = true;
-    try {
-      const result = await api(`/api/job?id=${encodeURIComponent(run.id)}&since=${run.seq}`);
-      if (!result.ok) { handle({ type: "error", message: result.error || "Lost track of this run.", saved: 0 }); return; }
-      for (const event of result.events) { run.seq = event.seq + 1; handle(event); }
-      if (run.live) renderLive();  // also keeps the elapsed time ticking
-    } catch (e) {
-      handle({ type: "error", message: "Scene Director is not running anymore. Start it again. Finished batches are in the output folder.", saved: 0 });
-    } finally {
-      run.polling = false;
-    }
-  }
-  function follow(id) {
-    Object.assign(run, { id, seq: 0, prompts: [], file: null, total: 0, notices: [], live: null, workflow: brief.workflow });
-    $("#log").textContent = ""; $("#log").hidden = true; $("#logToggle").hidden = true;
-    $("#copyAll").disabled = true;
-    page.textContent = "";
-    setProgress(0, 1);
-    setRunning(true);
-    clearInterval(run.timer);
-    run.timer = setInterval(poll, 250);
-    poll();
-  }
-
-  async function start(e) {
-    if (e) e.preventDefault();
-    if (run.id) return;
-    if (reference.loading && brief.workflow !== "edit_prompt") { setStatus("Wait for the reference image to finish loading."); return; }
-    const editing = brief.workflow === "change_image";
-    const rewriting = brief.workflow === "rewrite";
-    const promptEditing = brief.workflow === "edit_prompt";
-    if (promptEditing && (!brief.promptEditSource.trim() || !brief.promptEditChanges.trim())) {
-      setStatus("Paste the original prompt and describe what should change first."); return;
-    }
-    if (rewriting && (!brief[rewriteKeys()[0]].trim() || (brief.rewriteVision ? !reference.data_url : !brief.rewritePrompt.trim()))) {
-      setStatus("Choose system instructions and paste a prompt, or enable Vision and upload an image."); return;
-    }
-    if (editing && (!reference.data_url || !brief.changes.trim())) {
-      setStatus("Upload a source image and describe the changes first."); return;
-    }
-    brief.count = clampCount(brief.count);
-    $("#count").value = brief.count;
-    const two = brief.mode === "two";
-    let request = {
-      target: brief.target,
-      subject: (two ? brief.first : brief.subject).trim() || "person",
-      identity: (two ? brief.firstLora : brief.lora) ? "lora" : "free",
-      subject2: two ? (brief.second.trim() || "another person") : "",
-      identity2: brief.secondLora ? "lora" : "free",
-      interaction: two ? brief.interaction.trim() : "",
-      direction: brief.direction.trim(),
-      count: brief.count,
-      creativity: brief.creativity,
-      style: brief.style.trim(),
-      wishes: brief.wishes.trim(),
-      avoid: brief.avoid,
-      parameters: brief.fixed.filter(f => f.name.trim() || f.value.trim()),
-      api_url: conn.api_url, api_key: conn.api_key, model: conn.model,
-      output_dir: conn.output_dir || defaultOutputDir
-    };
-    if (reference.data_url) request.reference_image = { data_url: reference.data_url, mode: brief.referenceMode, notes: brief.referenceNotes.trim() };
-    if (editing) request = {
-      workflow: "change_image", target: brief.target, count: 1, changes: brief.changes.trim(),
-      edit_output: brief.editOutput, preserve: brief.preserve.trim(),
-      reference_image: { data_url: reference.data_url, mode: "scene", notes: "" },
-      api_url: conn.api_url, api_key: conn.api_key, model: conn.model, output_dir: conn.output_dir || defaultOutputDir
-    };
-    if (rewriting) {
-      request = { workflow: "rewrite", count: 1, rewrite_prompt: brief.rewritePrompt.trim(),
-        rewrite_system: brief[rewriteKeys()[0]].trim(), rewrite_use_vision: brief.rewriteVision,
-        api_url: conn.api_url, api_key: conn.api_key, model: conn.model, output_dir: conn.output_dir || defaultOutputDir };
-      if (brief.rewriteVision) request.reference_image = { data_url: reference.data_url };
-    }
-    if (promptEditing) request = {
-      workflow: "edit_prompt", count: 1, source_prompt: brief.promptEditSource.trim(), changes: brief.promptEditChanges.trim(),
-      api_url: conn.api_url, api_key: conn.api_key, model: conn.model, output_dir: conn.output_dir || defaultOutputDir
-    };
-    setStatus("Starting…");
-    try {
-      const result = await api("/api/generate", request);
-      if (!result.ok) { setStatus(result.error); return; }
-      follow(result.id);
-    } catch (err) {
-      setStatus("Scene Director is not running. Start it again from its launcher.");
-    }
-  }
-  $("#brief").addEventListener("submit", start);
-  $("#stopBtn").addEventListener("click", async () => {
-    $("#stopBtn").disabled = true;
-    setStatus("Stopping… finished batches stay saved.");
-    try { await api("/api/stop", {}); } catch (e) { /* the poll reports the outcome */ }
-  });
-  document.addEventListener("keydown", (e) => {
-    if ((e.ctrlKey || e.metaKey) && e.key === "Enter" && !dialog.open && !$("#promptWorkspace").hidden) start(e);
-  });
-  if (/Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent)) $("#kbdHint").textContent = "Cmd + Enter also starts a run.";
-
-  // Boot -----------------------------------------------------------------------
-  if (window.sceneDirectorDesktop?.choosePresetFolder) {
-    const buttons = $$("[data-choose-folder]");
-    $("#folderPickerHelp").hidden = false;
-    for (const button of buttons) {
-      button.hidden = false;
-      button.addEventListener("click", async () => {
-        const field = $(button.dataset.chooseFolder === "vision" ? "#visionPresetDir" : "#presetDir");
-        buttons.forEach(item => { item.disabled = true; });
-        try {
-          const selected = await window.sceneDirectorDesktop.choosePresetFolder(button.dataset.chooseFolder, field.value);
-          if (typeof selected === "string" && selected) field.value = selected;
-        } catch (error) {
-          $("#testResult").className = "test-result err";
-          $("#testResult").textContent = "Could not open the folder picker. Try again or enter the folder path.";
-        } finally { buttons.forEach(item => { item.disabled = false; }); }
-      });
-    }
-  }
-  if (location.protocol === "scene-director:") {
-    $("#keyHelp").textContent = "Needed when your server requires authentication, such as an LM Studio API token. Save stores it in this app's private settings folder on this Mac. It is never shown in this page again.";
-  }
-  async function boot() {
-    loadBrief();
-    renderBrief();
-    renderEmpty();
-    try {
-      const state = await api("/api/state");
-      presets = state.presets || presets;
-      samplingDefaults = state.sampling_defaults || samplingDefaults;
-      defaultOutputDir = state.default_output_dir || "";
-      Object.assign(conn, state.settings || {});
-      if (!conn.output_dir) conn.output_dir = defaultOutputDir;
-      await refreshPresets();
-      checkConnection();
-      if (state.job && !state.job.finished && state.job.workflow !== "dataset_caption") follow(state.job.id);
-    } catch (e) {
-      setPill("err", "Scene Director is not running");
-    }
-  }
-  boot();
-})();
-</script>
+<script src="/prompt-core.js"></script>
+<script src="/app.js"></script>
 <script src="/dataset-core.js"></script>
 <script src="/dataset.js"></script>
 </body>

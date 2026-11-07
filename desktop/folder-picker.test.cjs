@@ -2,6 +2,7 @@
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
+const path = require('node:path');
 const { createPresetFolderPicker } = require('./folder-picker.cjs');
 
 function fixture(showOpenDialog = async () => ({ canceled: false, filePaths: ['/shared/presets'] })) {
@@ -43,6 +44,20 @@ test('foreign windows, subframes and other pages cannot open the picker', async 
   assert.equal(f.calls.length, 0);
 });
 
+test('dataset folders and ComfyUI workflow files use their own fixed dialogs', async () => {
+  const calls = [];
+  const window = { isDestroyed: () => false, webContents: {} };
+  window.webContents.mainFrame = { url: 'scene-director://app/' };
+  const choose = createPresetFolderPicker({ dialog: { showOpenDialog: async (_w, options) => { calls.push(options); return { canceled: false, filePaths: ['/x'] }; } },
+    getWindow: () => window, isAppPage: url => url === 'scene-director://app/', documentsPath: '/docs', homePath: '/home' });
+  const event = { sender: window.webContents, senderFrame: window.webContents.mainFrame };
+  assert.equal(await choose(event, 'dataset', ''), '/x');
+  assert.deepEqual(calls[0].properties, ['openDirectory', 'createDirectory']);
+  assert.equal(await choose(event, 'workflow', ''), '/x');
+  assert.deepEqual(calls[1].properties, ['openFile']);
+  assert.deepEqual(calls[1].filters[0].extensions, ['json']);
+  await assert.rejects(choose(event, '__proto__', ''), /Invalid/);
+});
 test('invalid kinds and path values are refused before displaying a dialog', async () => {
   const f = fixture();
   for (const [kind, value] of [['other', ''], ['text', {}], ['vision', 'x'.repeat(4097)], ['text', 'bad\0path']]) {
@@ -55,7 +70,7 @@ test('home paths expand and empty paths start in Documents', async () => {
   const f = fixture();
   await f.choose(f.event, 'text', '~/presets');
   await f.choose(f.event, 'vision', '');
-  assert.equal(f.calls[0][1].defaultPath, '/Users/test/presets');
+  assert.equal(f.calls[0][1].defaultPath, path.join('/Users/test', 'presets'));
   assert.equal(f.calls[1][1].defaultPath, '/Users/test/Documents');
 });
 
