@@ -13,11 +13,14 @@ import argparse
 import base64
 import binascii
 import http.client
+import io
 import json
 import math
 import os
 import re
+import select
 import socket
+import ssl
 import sys
 import threading
 import time
@@ -536,6 +539,87 @@ class Cancelled(GenerationError):
     """A caption or locate request was stopped by the user."""
 
 
+class CancellableSocket:
+    """Poll native I/O so cancellation does not depend on cross-thread shutdown.
+
+    Winsock may leave a blocked select/recv asleep after shutdown on another
+    handle. Nonblocking reads and writes retain the request's original timeout,
+    while checking cancellation at most every 50 ms. TLS verification/handshakes
+    are still performed by urllib's original HTTPSConnection before wrapping.
+    """
+
+    def __init__(self, connected, owner):
+        self.socket = connected
+        self.owner = owner
+        self.timeout = connected.gettimeout()
+        connected.setblocking(False)
+
+    def __getattr__(self, name):
+        return getattr(self.socket, name)
+
+    def wait(self, write, deadline):
+        self.owner.check()
+        remaining = None if deadline is None else deadline - time.monotonic()
+        if remaining is not None and remaining <= 0:
+            raise socket.timeout("timed out")
+        delay = 0.05 if remaining is None else min(0.05, remaining)
+        select.select([] if write else [self.socket], [self.socket] if write else [], [], delay)
+        self.owner.check()
+
+    def deadline(self):
+        return None if self.timeout is None else time.monotonic()+self.timeout
+
+    def sendall(self, data, flags=0):
+        pending = memoryview(data)
+        deadline = self.deadline()
+        while pending:
+            self.owner.check()
+            try:
+                sent = self.socket.send(pending, flags)
+            except ssl.SSLWantReadError:
+                self.wait(False, deadline)
+            except (BlockingIOError, ssl.SSLWantWriteError):
+                self.wait(True, deadline)
+            else:
+                if sent == 0:
+                    raise ConnectionError("The model server closed its connection.")
+                pending = pending[sent:]
+
+    def makefile(self, mode="r", buffering=None, *args, **kwargs):
+        if mode != "rb" or args or kwargs:
+            raise ValueError("The request transport accepts binary response readers only.")
+        stream = self.socket.makefile("rb", buffering=0)
+        owner = self
+
+        class Reader(io.RawIOBase):
+            def readable(self):
+                return True
+
+            def readinto(self, buffer):
+                deadline = owner.deadline()
+                while True:
+                    owner.owner.check()
+                    try:
+                        count = stream.readinto(buffer)
+                    except ssl.SSLWantReadError:
+                        owner.wait(False, deadline)
+                    except ssl.SSLWantWriteError:
+                        owner.wait(True, deadline)
+                    else:
+                        if count is not None:
+                            return count
+                        owner.wait(False, deadline)
+
+            def close(self):
+                try:
+                    stream.close()
+                finally:
+                    super().close()
+
+        raw = Reader()
+        return raw if buffering == 0 else io.BufferedReader(raw, buffering if buffering and buffering > 0 else io.DEFAULT_BUFFER_SIZE)
+
+
 class CancellableRequests:
     """Interrupt blocking urllib requests, including waits for headers or stream data.
 
@@ -590,6 +674,7 @@ class CancellableRequests:
                     if connection.sock is not None:
                         self.sockets.append(connection.sock)
                 self.check()
+                connection.sock = CancellableSocket(connection.sock, self)
 
             connection.connect = tracked_connect
             return connection

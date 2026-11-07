@@ -1,0 +1,35 @@
+name: Source checks
+
+on:
+  push:
+    branches: [main, scene-director-3.9]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  source:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-22.04, windows-2022, macos-15]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Check private service startup
+        run: python desktop/check_source_startup.py
+      - name: Check source behavior
+        run: python -m unittest -q
+      - name: Check interface helpers
+        run: node --test desktop/*.test.cjs
