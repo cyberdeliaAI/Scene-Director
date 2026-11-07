@@ -632,10 +632,12 @@
         const token = crypto.randomUUID(); state.tokens.add(token);
         try {
           const output = await prepared(item, true);
+          const data_url = await dataURL(output.blob);
           if (state.stop) break;
           const job = { itemId:item.id, revision, key:key(item) };
           const result = await api('/api/caption', { token, rewrite_system:state.config.system, rewrite_prompt:state.config.extra || 'Write the training caption for this prepared image.',
-            caption_trigger:state.config.trigger, caption_traits:state.config.traits, reference_image:{ data_url:await dataURL(output.blob) }, api_url:connection.api_url, model:connection.model });
+            caption_trigger:state.config.trigger, caption_traits:state.config.traits, reference_image:{ data_url }, api_url:connection.api_url, model:connection.model });
+          if (state.stop) break;
           if (applyCaption(job, result.text)) counts.completed++; else counts.kept++;
         } catch (error) {
           if (state.stop) break;
@@ -680,7 +682,9 @@
         const token = crypto.randomUUID(); state.tokens.add(token);
         try {
           const shot = await locateImage(item);
+          if (state.stop) break;
           const result = await api('/api/locate', { image:shot.url, target:config.autoTarget, token, api_url:connection.api_url, model:connection.model });
+          if (state.stop) break;
           if (!result.box) { missed++; continue; }
           const [x1, y1, x2, y2] = result.box, toX = v => C.clamp((v - shot.ox) / shot.scale, 0, shot.width), toY = v => C.clamp((v - shot.oy) / shot.scale, 0, shot.height);
           const region = { x:toX(x1), y:toY(y1), w:Math.max(1, toX(x2) - toX(x1)), h:Math.max(1, toY(y2) - toY(y1)) };

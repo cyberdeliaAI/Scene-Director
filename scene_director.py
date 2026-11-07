@@ -12,11 +12,14 @@ contacting a server. See README.md for details.
 import argparse
 import base64
 import binascii
+import http.client
 import json
 import math
 import os
 import re
+import socket
 import sys
+import threading
 import time
 import urllib.error
 import urllib.request
@@ -533,6 +536,94 @@ class Cancelled(GenerationError):
     """A caption or locate request was stopped by the user."""
 
 
+class CancellableRequests:
+    """Interrupt blocking urllib requests, including waits for headers or stream data.
+
+    Keep a duplicate of each connected socket until the operation ends. Shutting
+    it down wakes blocked readers even after urllib hands the socket to a response.
+    urllib's redirect, proxy and TLS verification behavior stays in place.
+    """
+
+    def __init__(self, cancel):
+        self.cancel = cancel
+        self.finished = threading.Event()
+        self.lock = threading.Lock()
+        self.sockets = []
+        owner = self
+
+        class HTTPHandler(urllib.request.HTTPHandler):
+            def http_open(self, request):
+                return self.do_open(owner.connection(http.client.HTTPConnection), request)
+
+        class HTTPSHandler(urllib.request.HTTPSHandler):
+            def https_open(self, request):
+                return self.do_open(owner.connection(http.client.HTTPSConnection), request, context=self._context)
+
+        self.opener = urllib.request.build_opener(HTTPHandler(), HTTPSHandler())
+        self.watcher = threading.Thread(target=self._watch, daemon=True)
+
+    def connection(self, kind):
+        def create(host, **kwargs):
+            connection = kind(host, **kwargs)
+            create_socket = connection._create_connection
+
+            def tracked_socket(*args, **options):
+                self.check()
+                connected = create_socket(*args, **options)
+                try:
+                    with self.lock:
+                        self.sockets.append(connected.dup())
+                    self.check()
+                    return connected
+                except BaseException:
+                    connected.close()
+                    raise
+
+            connection._create_connection = tracked_socket
+            return connection
+        return create
+
+    def check(self):
+        if self.cancel.is_set():
+            raise Cancelled("Vision request stopped.")
+
+    def _watch(self):
+        while not self.finished.wait(0.02):
+            if self.cancel.is_set():
+                with self.lock:
+                    for connected in self.sockets:
+                        try:
+                            connected.shutdown(socket.SHUT_RDWR)
+                        except OSError:
+                            pass
+
+    def open(self, request, timeout):
+        self.check()
+        try:
+            response = self.opener.open(request, timeout=timeout)
+        except Exception:
+            self.check()
+            raise
+        if self.cancel.is_set():
+            response.close()
+            self.check()
+        return response
+
+    def __enter__(self):
+        self.check()
+        self.watcher.start()
+        return self
+
+    def __exit__(self, kind, value, traceback):
+        self.finished.set()
+        self.watcher.join()
+        with self.lock:
+            for connected in self.sockets:
+                connected.close()
+            self.sockets.clear()
+        self.check()
+
+
 THINKING_HELP = (
     "The model spent its whole token budget thinking and wrote no prompts. "
     "Switch thinking or reasoning off for this model in LM Studio, or load a "
@@ -540,7 +631,7 @@ THINKING_HELP = (
 
 
 class Client:
-    def __init__(self, url=API_URL, key=API_KEY, model=MODEL, timeout=TIMEOUT, notify=None, sampling=None):
+    def __init__(self, url=API_URL, key=API_KEY, model=MODEL, timeout=TIMEOUT, notify=None, sampling=None, transport=None):
         self.url = (url or DEFAULT_API_URL).strip().rstrip("/")
         self.key = key or ""
         self.model = (model or "").strip()
@@ -550,6 +641,7 @@ class Client:
         self.sampling = validate_sampling(sampling)
         self.vision_checked = False
         self.image_encoding = "data_url"
+        self.transport = transport
 
     def _open(self, url, payload=None, timeout=None):
         headers = {"Content-Type": "application/json"}
@@ -558,12 +650,20 @@ class Client:
         data = json.dumps(payload).encode("utf-8") if payload is not None else None
         req = urllib.request.Request(url, data=data, headers=headers)
         try:
+            if self.transport is not None:
+                return self.transport.open(req, timeout=timeout or self.timeout)
             return urllib.request.urlopen(req, timeout=timeout or self.timeout)
         except urllib.error.HTTPError as exc:
-            body = exc.read().decode("utf-8", errors="replace")
-            exc.close()
+            try:
+                body = exc.read().decode("utf-8", errors="replace")
+            finally:
+                exc.close()
+            if self.transport is not None:
+                self.transport.check()
             raise ApiError(exc.code, body) from exc
-        except (urllib.error.URLError, TimeoutError, OSError) as exc:
+        except (urllib.error.URLError, TimeoutError, OSError, http.client.HTTPException) as exc:
+            if self.transport is not None:
+                self.transport.check()
             reason = getattr(exc, "reason", exc)
             raise GenerationError(
                 f"Cannot reach {url} ({reason}). Start the server in LM Studio "
@@ -767,9 +867,13 @@ class Client:
                         content, reasoning, finish = self._message(self._decode_json(raw, url))
                         if stream and content:
                             on_delta("content", content)  # server ignored streaming
-            except OSError as exc:
+            except (OSError, http.client.HTTPException) as exc:
+                if self.transport is not None:
+                    self.transport.check()
                 raise GenerationError(
                     f"The connection to the server dropped while the model was writing ({exc}).") from exc
+        if self.transport is not None:
+            self.transport.check()
         self.last_finish_reason = finish
         if not strip_reasoning(content):
             unfinished_think = bool(re.search(r"<think\b", content, re.I))
@@ -1064,7 +1168,8 @@ def save_record(out, brief, count, model, sampling, created, ideas, prompts):
     """Write the run's brief, model and settings next to its .txt file. Best effort."""
     path = Path(out).with_suffix(".json")
     data = {"app": APP_NAME, "version": VERSION, "created": created, "model": model, "sampling": sampling,
-            "request": request_record(brief, count), "count": len(prompts), "ideas": list(ideas)}
+            "request": request_record(brief, count), "count": len(prompts), "ideas": list(ideas),
+            "prompts": list(prompts), "choices": per_prompt_choices(brief.parameters, len(prompts))}
     temporary = path.with_name(path.name + ".tmp")
     temporary.write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     temporary.replace(path)
@@ -1099,13 +1204,14 @@ def tidy_reply(text):
 
 
 def caption_image(brief, client, cancel=None):
-    """One dataset caption for the web service's parallel caption requests. Streams so Stop is immediate."""
+    """One dataset caption for the web service's parallel caption requests."""
     def watch(_channel, _text):
         if cancel is not None and cancel.is_set():
             raise Cancelled("Captioning stopped.")
     watch(None, None)
     result = " ".join(tidy_reply(client.chat(caption_system(brief), build_user_message(brief, 1, []),
                                              4096, watch, brief.reference)).split())
+    watch(None, None)
     if not result:
         raise GenerationError("The model returned no caption. Try again or choose different instructions.")
     return apply_trigger(brief.caption_trigger, result)
@@ -1154,6 +1260,8 @@ def locate_region(client, image, target, cancel=None):
     if cancel is not None and cancel.is_set():
         raise Cancelled("Auto crop stopped.")
     reply_text = client.chat(LOCATE_SYSTEM, "Locate: " + LOCATE_TARGETS.get(target, target), 1024, None, image)
+    if cancel is not None and cancel.is_set():
+        raise Cancelled("Auto crop stopped.")
     return parse_box(reply_text)
 
 
@@ -1293,7 +1401,9 @@ def run(brief, count, client, emit, batch_size=BATCH_SIZE, output_dir=OUTPUT_DIR
                 ideas_out.append(idea or "")
                 notes.append(scene_note(idea, prompt))
                 added += 1
+                choices = per_prompt_choices(brief.parameters, 1, len(prompts) - 1)
                 emit({"type": "prompt", "index": len(prompts), "idea": idea, "text": text,
+                      "choices": choices[0] if choices else {},
                       "words": len(text.split())})
                 if added == n:
                     break

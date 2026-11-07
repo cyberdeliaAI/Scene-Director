@@ -49,7 +49,7 @@
   let promptLibrary = { text: [], vision: [] }, promptLibraryLoaded = false, presetRevision = 0;
   let presets = { lmstudio: { url: "http://localhost:1234/v1" }, ollama: { url: "http://localhost:11434/v1" } };
   let defaultOutputDir = "";
-  const run = { id: null, seq: 0, timer: null, prompts: [], ideas: [], file: null, total: 0, notices: [], request: null, view: "live" };
+  const run = { id: null, seq: 0, timer: null, prompts: [], ideas: [], choices: [], file: null, total: 0, notices: [], request: null, view: "live" };
   const single = { busy: false };
   const favorites = new Set();
 
@@ -755,6 +755,7 @@
     if (run.prompts.length === 0) page.textContent = "";
     if (!page.querySelector(".transition")) page.appendChild(el("p", "transition", "FADE IN:"));
     run.prompts.push(event.text); run.ideas.push(event.idea || "");
+    run.choices.push(event.choices || window.ScenePromptCore.rotatingChoices(run.request?.parameters, run.prompts.length - 1));
     page.appendChild(sceneCard(run.prompts.length - 1, true));
     if (page.scrollHeight > page.clientHeight) page.scrollTo({ top: page.scrollHeight, behavior: "smooth" });
     $("#copyAll").disabled = false; renderBarActions();
@@ -858,7 +859,7 @@
     }
   }
   function follow(id) {
-    Object.assign(run, { id, seq: 0, prompts: [], ideas: [], file: null, total: 0, notices: [], live: null, workflow: brief.workflow, request: null, view: "live" });
+    Object.assign(run, { id, seq: 0, prompts: [], ideas: [], choices: [], file: null, total: 0, notices: [], live: null, workflow: brief.workflow, request: null, view: "live" });
     $("#log").textContent = ""; $("#log").hidden = true; $("#logToggle").hidden = true;
     $("#copyAll").disabled = true;
     page.textContent = "";
@@ -1002,7 +1003,7 @@
   async function persistRun() {
     if (run.view === "favorites" || !run.file) return true;
     try {
-      const result = await api("/api/run-file", { file: run.file, prompts: run.prompts, ideas: run.ideas });
+      const result = await api("/api/run-file", { file: run.file, prompts: run.prompts, ideas: run.ideas, choices: run.choices });
       if (!result.ok) { setStatus(result.error); return false; }
       return true;
     } catch (e) { setStatus("Scene Director is not running. Start it again."); return false; }
@@ -1015,7 +1016,7 @@
     area.value = run.prompts[index]; area.rows = 7; area.setAttribute("aria-label", `Edit prompt ${index + 1}`);
     const bar = el("div", "scene-foot");
     bar.append(button("Save", "", async () => {
-      const value = normalize(area.value);
+      const value = area.value.trim();
       if (!value) { setStatus("A prompt cannot be empty. Use Delete instead."); return; }
       run.prompts[index] = value;
       if (await persistRun()) setStatus(`Prompt ${index + 1} updated.`);
@@ -1029,7 +1030,7 @@
     if (isBusy()) { setStatus(busyMessage); return; }
     if (run.view === "favorites") { await toggleStar(index); return; }
     if (!confirm(`Delete prompt ${index + 1}${run.file ? " from this run and its file" : ""}?`)) return;
-    run.prompts.splice(index, 1); run.ideas.splice(index, 1);
+    run.prompts.splice(index, 1); run.ideas.splice(index, 1); run.choices.splice(index, 1);
     if (await persistRun()) setStatus(`Prompt ${index + 1} deleted.`);
     renderRun();
   }
@@ -1092,7 +1093,7 @@
     if (isBusy()) { setStatus(busyMessage); return; }
     const others = run.prompts.map((text, i) => i === index ? "" : (run.ideas[i] || text.split(/\s+/).slice(0, 30).join(" ")))
       .filter(Boolean).map(note => note.slice(0, 300)).slice(-300);
-    const request = { ...run.request, count: 1, save_output: false, previous_scenes: others };
+    const request = window.ScenePromptCore.regenerationRequest(run.request, index, run.choices[index], others);
     single.busy = true; renderReference();
     const card = page.querySelector(`.scene[data-index="${index}"]`);
     if (card) card.classList.add("regenerating");
@@ -1135,7 +1136,7 @@
       if (!item.ok) { $("#historyFolder").textContent = item.error; return; }
       historyDialog.close();
       if (briefOnly) { applyRequest(item.request); return; }
-      Object.assign(run, { prompts: item.prompts, ideas: item.ideas, file: item.file, view: "history", notices: [],
+      Object.assign(run, { prompts: item.prompts, ideas: item.ideas, choices: item.choices, file: item.file, view: "history", notices: [],
         workflow: (item.request && item.request.workflow) || "scenes", request: item.request ? requestForRegenerate(item.request) : null });
       $("#meta").textContent = `Opened ${file.split(/[\\/]/).pop()}${item.model ? `, written by ${item.model}` : ""}`;
       setProgress(0, 1); setStatus(""); renderRun();
@@ -1145,7 +1146,7 @@
     if (isBusy()) { $("#historyFolder").textContent = busyMessage; return; }
     const result = await loadFavorites();
     historyDialog.close();
-    Object.assign(run, { prompts: result.prompts.slice(), ideas: result.prompts.map(() => ""), file: result.file, workflow: "scenes", view: "favorites", request: null });
+    Object.assign(run, { prompts: result.prompts.slice(), ideas: result.prompts.map(() => ""), choices: [], file: result.file, workflow: "scenes", view: "favorites", request: null });
     $("#meta").textContent = "Starred prompts"; setStatus(""); renderRun();
   }
   // Fill the form from a stored request (History) or a saved brief.

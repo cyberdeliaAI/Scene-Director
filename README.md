@@ -54,6 +54,8 @@ Each prompt has **Copy**, **☆ Star** and, once ComfyUI is set up, **Queue in C
 
 **History** lists the prompt files in the output folder. **Open** shows a run with the same actions. **Use brief** fills the form with the brief that produced it. **Open starred prompts** shows your favorites. Every run writes a `.json` file next to its `.txt` with the brief, model and generation settings. Reference images are never stored.
 
+History and hand edits preserve complete multiline prompts. Run records also keep each prompt's selected rotating choices, so **New version** retains those choices after deletion or reopening a run. Legacy single-result edit files are read as one complete prompt.
+
 Long runs remember all earlier scenes as short topics, and drafts that nearly repeat an earlier scene are replaced, so runs of 100 prompts or more stay varied.
 
 ## Send prompts to ComfyUI

@@ -69,7 +69,7 @@ Run the checks from the parent `Scene Director` folder:
 
 ```sh
 python3 -m unittest -q
-node --test desktop/folder-picker.test.cjs desktop/dataset.test.cjs
+node --test desktop/*.test.cjs
 SCENE_DIRECTOR_TEST_BACKEND="$PWD/desktop/dist/3.7.0-beta.1/Scene Director-darwin-arm64/Scene Director.app/Contents/Resources/backend/scene-director-backend" python3 -m unittest test_desktop -q
 ```
 

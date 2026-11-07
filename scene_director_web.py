@@ -101,6 +101,7 @@ class App:
         self.worker_command = worker_command or [sys.executable, "-u", str(HERE / "scene_director.py")]
         self.store_lock = threading.Lock()
         self.cancels = {}
+        self.cancelled_tokens = {}
         self.resolved = {}
         self.vision_slots = threading.Semaphore(4)
 
@@ -362,6 +363,34 @@ class App:
             return None
         return value if isinstance(value, dict) and value.get("app") == engine.APP_NAME else None
 
+    @staticmethod
+    def _prompts(path, record):
+        text = path.read_text(encoding="utf-8")
+        stored = record.get("prompts")
+        if isinstance(stored, list) and all(isinstance(p, str) for p in stored):
+            stored = [p.replace("\r\n", "\n").replace("\r", "\n") for p in stored]
+            if "".join(p + "\n" for p in stored) == text:
+                return stored
+        # Older records did not keep boundaries. These workflows always wrote
+        # one complete prompt; the 3.7 editor also had no JSON record at all.
+        request = record.get("request") or {}
+        workflow = request.get("workflow") if isinstance(request, dict) else None
+        if (workflow in ("edit_prompt", "rewrite", "change_image") or
+                path.name.startswith(("prompt-edit_", "prompt-rewrite_")) or "_image-changes_" in path.name):
+            return [text.rstrip("\n")] if text.strip() else []
+        return [line for line in text.splitlines() if line.strip()]
+
+    @staticmethod
+    def _choices(record, count):
+        choices = record.get("choices")
+        if (isinstance(choices, list) and len(choices) == count and
+                all(isinstance(item, dict) and all(isinstance(k, str) and isinstance(v, str)
+                    for k, v in item.items()) for item in choices)):
+            return choices
+        request = record.get("request") or {}
+        parameters = request.get("parameters") if isinstance(request, dict) else None
+        return engine.per_prompt_choices(parameters if isinstance(parameters, dict) else {}, count) or [{} for _ in range(count)]
+
     def history(self):
         root = self._output_root()
         if not root.is_dir():
@@ -376,7 +405,7 @@ class App:
             label = (f"{request.get('subject', '')}{' + ' + request['subject2'] if request.get('subject2') else ''} · {request.get('direction', '')}"
                      if workflow == "scenes" else WORKFLOW_LABELS.get(workflow, path.stem))
             try:
-                count = len(self._lines(path))
+                count = len(self._prompts(path, record))
             except (OSError, UnicodeError):
                 continue
             runs.append({"file": str(path), "name": path.name, "label": label, "workflow": workflow,
@@ -387,30 +416,36 @@ class App:
     def history_item(self, file_value):
         path = self._run_file(file_value)
         record = self._record(path) or {}
-        prompts = self._lines(path)
+        prompts = self._prompts(path, record)
         ideas = record.get("ideas") if isinstance(record.get("ideas"), list) else []
         ideas = [i if isinstance(i, str) else "" for i in ideas][:len(prompts)]
         return {"ok": True, "file": str(path), "prompts": prompts, "ideas": ideas + [""] * (len(prompts) - len(ideas)),
-                "request": record.get("request"), "model": record.get("model")}
+                "choices": self._choices(record, len(prompts)), "request": record.get("request"), "model": record.get("model")}
 
     def save_run(self, data):
         path = self._run_file(data.get("file"))
         prompts, ideas = data.get("prompts"), data.get("ideas")
         if not isinstance(prompts, list) or len(prompts) > 1000 or not all(isinstance(p, str) and len(p) <= 20000 for p in prompts):
             raise engine.GenerationError("Send up to 1,000 prompts of at most 20,000 characters.")
-        prompts = [" ".join(p.split()) for p in prompts if p.strip()]
+        if any(not p.strip() for p in prompts):
+            raise engine.GenerationError("A prompt cannot be empty. Remove it from the run instead.")
+        record = self._record(path) or {"app": engine.APP_NAME, "version": engine.VERSION}
+        choices = data.get("choices", self._choices(record, len(prompts)))
+        if (not isinstance(choices, list) or len(choices) != len(prompts) or
+                any(not isinstance(item, dict) or any(not isinstance(k, str) or not isinstance(v, str)
+                    for k, v in item.items()) for item in choices)):
+            raise engine.GenerationError("Send one set of parameter choices per prompt.")
+        prompts = [p.replace("\r\n", "\n").replace("\r", "\n").strip() for p in prompts]
         temporary = path.with_name(path.name + ".tmp")
         temporary.write_text("".join(p + "\n" for p in prompts), encoding="utf-8")
         temporary.replace(path)
-        record = self._record(path)
-        if record is not None:
-            record["count"] = len(prompts)
-            if isinstance(ideas, list) and len(ideas) == len(prompts):
-                record["ideas"] = [i if isinstance(i, str) else "" for i in ideas]
-            record_path = path.with_suffix(".json")
-            temporary = record_path.with_name(record_path.name + ".tmp")
-            temporary.write_text(json.dumps(record, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
-            temporary.replace(record_path)
+        record.update(count=len(prompts), prompts=prompts, choices=choices)
+        if isinstance(ideas, list) and len(ideas) == len(prompts):
+            record["ideas"] = [i if isinstance(i, str) else "" for i in ideas]
+        record_path = path.with_suffix(".json")
+        temporary = record_path.with_name(record_path.name + ".tmp")
+        temporary.write_text(json.dumps(record, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+        temporary.replace(record_path)
         return {"ok": True, "file": str(path), "count": len(prompts)}
 
     def favorites(self):
@@ -440,9 +475,9 @@ class App:
 
     # Direct caption and locate requests (no worker process) ------------------------
 
-    def _vision_client(self, data, settings):
+    def _vision_client(self, data, settings, transport=None):
         sampling = engine.validate_sampling(data.get("sampling"), base=self.settings()["sampling_precise"])
-        client = engine.Client(settings["api_url"], self.api_key(data), settings["model"], settings["timeout"], sampling=sampling)
+        client = engine.Client(settings["api_url"], self.api_key(data), settings["model"], settings["timeout"], sampling=sampling, transport=transport)
         key = (client.url, client.key, client.model)
         with self.lock:
             hit = self.resolved.get(key)
@@ -458,10 +493,24 @@ class App:
         token = str(data.get("token") or uuid.uuid4().hex)[:64]
         event = threading.Event()
         with self.lock:
+            now = time.monotonic()
+            self.cancelled_tokens = {t: deadline for t, deadline in self.cancelled_tokens.items() if deadline > now}
+            if token in self.cancelled_tokens:
+                event.set()
             self.cancels[token] = event
         try:
-            with self.vision_slots:
-                return action(event)
+            while not self.vision_slots.acquire(timeout=0.05):
+                if event.is_set():
+                    raise engine.Cancelled("Vision request stopped.")
+            try:
+                if event.is_set():
+                    raise engine.Cancelled("Vision request stopped.")
+                result = action(event)
+                if event.is_set():
+                    raise engine.Cancelled("Vision request stopped.")
+                return result
+            finally:
+                self.vision_slots.release()
         except engine.Cancelled as exc:
             return {"ok": False, "stopped": True, "error": str(exc)}
         finally:
@@ -472,11 +521,11 @@ class App:
         payload = {k: v for k, v in data.items() if k not in ("token", "api_key")}
         payload.update(workflow="dataset_caption", count=1, rewrite_use_vision=True)
         brief, _, settings = engine.request_from_json(payload)
-        client = self._vision_client(data, settings)
-
         def action(event):
-            text = engine.caption_image(brief, client, event)
-            return {"ok": True, "text": text, "words": len(text.split()), "model": client.model}
+            with engine.CancellableRequests(event) as transport:
+                client = self._vision_client(data, settings, transport)
+                text = engine.caption_image(brief, client, event)
+                return {"ok": True, "text": text, "words": len(text.split()), "model": client.model}
         return self._cancellable(data, action)
 
     def locate(self, data):
@@ -487,13 +536,24 @@ class App:
             raise engine.GenerationError("Choose what to crop to.")
         image = engine.validate_reference({"data_url": data.get("image")})
         settings = {"api_url": str(data.get("api_url") or engine.API_URL), "model": str(data.get("model") or ""), "timeout": engine.TIMEOUT}
-        client = self._vision_client(data, settings)
-        return self._cancellable(data, lambda event: {"ok": True, "box": engine.locate_region(client, image, target.strip(), event)})
+        def action(event):
+            with engine.CancellableRequests(event) as transport:
+                client = self._vision_client(data, settings, transport)
+                return {"ok": True, "box": engine.locate_region(client, image, target.strip(), event)}
+        return self._cancellable(data, action)
 
     def stop_vision(self, data):
         tokens = data.get("tokens")
         with self.lock:
             events = [e for t, e in self.cancels.items() if not isinstance(tokens, list) or t in tokens]
+            # Stop may arrive before a large image request finishes uploading.
+            # Remember its client token so it cannot start after cancellation.
+            if isinstance(tokens, list):
+                deadline = time.monotonic() + max(60, engine.TIMEOUT)
+                for token in tokens[:1000]:
+                    if isinstance(token, str) and 0 < len(token) <= 64:
+                        self.cancelled_tokens[token] = deadline
+                self.cancelled_tokens = dict(list(self.cancelled_tokens.items())[-2000:])
         for event in events:
             event.set()
         return {"ok": True, "stopped": len(events)}
@@ -697,7 +757,7 @@ def make_handler(app, port_holder, auth_token=None):
                 except OSError:
                     return self._send(500, b"web/index.html is missing.", "text/plain; charset=utf-8")
             font = FONT_RE.fullmatch(url.path)
-            assets = {"/app.js": "text/javascript; charset=utf-8", "/app.css": "text/css; charset=utf-8",
+            assets = {"/app.js": "text/javascript; charset=utf-8", "/prompt-core.js": "text/javascript; charset=utf-8", "/app.css": "text/css; charset=utf-8",
                       "/dataset.js": "text/javascript; charset=utf-8", "/dataset-core.js": "text/javascript; charset=utf-8",
                       "/dataset.css": "text/css; charset=utf-8", "/app-icon.png": "image/png"}
             if url.path in assets:
