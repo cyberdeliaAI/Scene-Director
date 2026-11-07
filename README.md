@@ -8,7 +8,7 @@ Scene Director asks a local language model to invent the scenes for you. You set
 
 Version 3.9.0. Python 3.9 or newer. No packages to install.
 
-An experimental **Electron app for Apple Silicon** is available, version 3.7.0-beta.1. [Download the macOS test app](https://github.com/cyberdeliaAI/Scene-Director/releases/tag/v3.7.0-beta.1) from this private repository's Releases page. It includes Python and opens in its own Mac window. Apple Silicon and macOS 13 or newer are required. See [desktop/README.md](desktop/README.md) for installation, storage locations and build instructions. Source is included here; compiled apps are attached to releases. The browser launchers continue to work as before.
+An experimental **Electron app for Apple Silicon** is available, version 3.9.0-beta.1. [Download the macOS test app](https://github.com/cyberdeliaAI/Scene-Director/releases/tag/v3.9.0-beta.1) from this private repository's Releases page. It includes Python and opens in its own Mac window. Apple Silicon and macOS 13 or newer are required. See [desktop/README.md](desktop/README.md) for installation, storage locations and build instructions. Source is included here; compiled apps are attached to releases. The browser launchers continue to work as before.
 
 ## Quick start with LM Studio
 

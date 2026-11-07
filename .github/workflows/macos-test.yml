@@ -1,0 +1,75 @@
+name: Signed Apple Silicon test
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main, scene-director-3.9]
+    paths: ['.github/workflows/macos-test.yml', 'desktop/**', 'test_desktop.py']
+
+permissions:
+  contents: read
+
+concurrency:
+  group: signed-macos-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  signed-test:
+    if: >-
+      github.repository == 'cyberdeliaAI/Scene-Director' &&
+      github.actor == 'cyberdeliaAI' &&
+      (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/scene-director-3.9') &&
+      (github.event_name == 'workflow_dispatch' ||
+       (github.event_name == 'push' && startsWith(github.event.head_commit.message, 'Build signed macOS Apple Silicon test ')))
+    runs-on: macos-15
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: desktop/package-lock.json
+      - name: Check Apple Silicon and prepare build tools
+        run: |
+          test "$(uname -m)" = arm64
+          python3 -m venv desktop/.venv
+          desktop/.venv/bin/python -m pip install -r desktop/requirements-build.txt
+          npm ci --prefix desktop --ignore-scripts --no-audit --no-fund
+          node desktop/node_modules/electron/install.js
+      - name: Check source and interface
+        run: |
+          python3 -m unittest -q
+          node --test desktop/*.test.cjs
+      - name: Prepare backend without signing credentials
+        run: npm run prepare:mac --prefix desktop
+      - name: Keep Apple ticket lookup on HTTPS over TCP
+        # Hosted-runner HTTP/3 workaround used by the other signed Cyberdelia apps.
+        # Only this disposable runner is affected; TLS and signature checks remain enabled.
+        run: |
+          echo "block return out quick proto udp from any to any port 443" | sudo pfctl -f -
+          sudo pfctl -E
+      - name: Sign with Developer ID and notarize with Apple
+        env:
+          CSC_LINK: ${{ secrets.CSC_LINK }}
+          CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: npm run sign:mac --prefix desktop
+      - name: Verify signatures, stapled ticket, Gatekeeper and extracted app
+        env:
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          desktop/.venv/bin/python desktop/verify_mac.py --app "desktop/dist/3.9.0-beta.1/signed/mac-arm64/Scene Director.app"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: scene-director-3.9.0-beta.1-macos-arm64-signed
+          path: desktop/dist/3.9.0-beta.1/artifacts/*
+          if-no-files-found: error
+          retention-days: 14

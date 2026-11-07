@@ -4,6 +4,7 @@ const { packager } = require('@electron/packager');
 const { execFileSync } = require('node:child_process');
 const fs = require('node:fs');
 const path = require('node:path');
+const { plainEnvironment } = require('./build-utils.cjs');
 
 async function main() {
   if (process.platform !== 'darwin' || process.arch !== 'arm64') {
@@ -19,27 +20,40 @@ async function main() {
     '-m', 'PyInstaller', '--noconfirm', '--clean', '--onedir', '--target-architecture', 'arm64',
     '--name', 'scene-director-backend', '--distpath', path.join(build, 'python-dist'),
     '--workpath', path.join(build, 'python-work'), '--specpath', path.join(build, 'spec'),
-    '--add-data', `${path.join(root, 'web')}:web`, path.join(root, 'scene_director_desktop.py'),
-  ], { cwd: root, stdio: 'inherit', env: { ...process.env, PYINSTALLER_CONFIG_DIR: path.join(build, 'pyinstaller-cache') } });
+    '--add-data', `${path.join(root, 'web')}:web`,
+    '--add-data', `${execFileSync(path.join(__dirname, '.venv', 'bin', 'python'), ['-c', 'import certifi; print(certifi.where())'], { encoding:'utf8', env:plainEnvironment() }).trim()}:certificates`,
+    '--runtime-hook', path.join(__dirname, 'certificates.py'), path.join(root, 'scene_director_desktop.py'),
+  ], { cwd: root, stdio: 'inherit', env: { ...plainEnvironment(), PYINSTALLER_CONFIG_DIR: path.join(build, 'pyinstaller-cache') } });
+  const licenses = JSON.parse(execFileSync(path.join(__dirname, '.venv', 'bin', 'python'), ['-c',
+    'import json, sys, sysconfig, importlib.metadata as m; from pathlib import Path; print(json.dumps({' +
+    '"Python-LICENSE.txt":str(Path(sysconfig.get_path("stdlib"))/"LICENSE.txt"),' +
+    '"Python-third-party-licenses.html":str(Path(sys.base_prefix)/"Resources/English.lproj/Documentation/license.html"),' +
+    '"PyInstaller-COPYING.txt":str(m.distribution("pyinstaller").locate_file("pyinstaller-6.22.3.dist-info/licenses/COPYING.txt")),' +
+    '"certifi-LICENSE.txt":str(next(m.distribution("certifi").locate_file(f) for f in m.distribution("certifi").files if str(f).endswith("licenses/LICENSE")))}))',
+  ], { encoding:'utf8', env:plainEnvironment() }));
+  fs.mkdirSync(path.join(build, 'licenses'), { recursive:true });
+  for (const [name, source] of Object.entries(licenses)) {
+    if (fs.existsSync(source)) fs.copyFileSync(source, path.join(build, 'licenses', name));
+  }
+  for (const name of ['LICENSE', 'LICENSES.chromium.html']) {
+    const source = path.join(__dirname, 'node_modules/electron/dist', name);
+    if (!fs.existsSync(source)) throw new Error('Install the pinned Electron binary before building.');
+    fs.copyFileSync(source, path.join(build, 'licenses', name === 'LICENSE' ? 'Electron-LICENSE.txt' : name));
+  }
+  if (process.argv.includes('--prepare')) { console.log('Prepared the backend and desktop source.'); return; }
   const version = require('./package.json').version;
   const outputs = await packager({
     dir: stage, name: 'Scene Director', platform: 'darwin', arch: 'arm64',
     icon: path.join(__dirname, 'assets', 'SceneDirector.icns'),
     electronVersion: require('./package.json').devDependencies.electron,
     out: path.join(__dirname, 'dist', version), overwrite: true, asar: true,
-    appBundleId: 'com.scenedirector.desktop.test', appVersion: version, buildVersion: '3.7.0.1',
+    appBundleId: 'com.scenedirector.desktop.test', appVersion: version, buildVersion: '3.9.0.1',
     appCopyright: 'Scene Director',
     extendInfo: { LSMinimumSystemVersion: '13.0', NSHighResolutionCapable: true,
       NSHumanReadableCopyright: 'Scene Director — Apple Silicon test',
       NSLocalNetworkUsageDescription: 'Connect to your local language model server.' },
   });
   const bundle = path.join(outputs[0], 'Scene Director.app');
-  const licenses = JSON.parse(execFileSync(path.join(__dirname, '.venv', 'bin', 'python'), ['-c',
-    'import json, sys, sysconfig, importlib.metadata as m; from pathlib import Path; print(json.dumps({' +
-    '"Python-LICENSE.txt":str(Path(sysconfig.get_path("stdlib"))/"LICENSE.txt"),' +
-    '"Python-third-party-licenses.html":str(Path(sys.base_prefix)/"Resources/English.lproj/Documentation/license.html"),' +
-    '"PyInstaller-COPYING.txt":str(m.distribution("pyinstaller").locate_file("pyinstaller-6.22.3.dist-info/licenses/COPYING.txt"))}))',
-  ], { encoding: 'utf8' }));
   for (const [name, source] of Object.entries(licenses)) {
     if (fs.existsSync(source)) fs.copyFileSync(source, path.join(outputs[0], name));
   }

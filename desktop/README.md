@@ -1,19 +1,19 @@
 # Scene Director for Apple Silicon — test build
 
-Version **3.7.0-beta.1**, based on Scene Director 3.7.0. A self-contained Electron app with the existing English interface and a bundled Python service. It writes prompts; image changes produce a revised prompt or edit instruction, not an edited image file.
+Version **3.9.0-beta.1**, based on Scene Director 3.9.0. A self-contained Electron app with the existing English interface and a bundled Python service. It writes prompts; image changes produce a revised prompt or edit instruction, not an edited image file.
 
 ## Install and use
 
-Download the standalone test bundle from the [private macOS test release](https://github.com/cyberdeliaAI/Scene-Director/releases/tag/v3.7.0-beta.1). This repository also includes the desktop source and build instructions.
+Download the standalone test bundle from the [private macOS test release](https://github.com/cyberdeliaAI/Scene-Director/releases/tag/v3.9.0-beta.1). This repository also includes the desktop source and build instructions.
 
-1. Extract `Scene_Director_3.7.0-beta.1_macOS_arm64.zip`.
+1. Extract `Scene_Director_3.9.0-beta.1_macOS_arm64.zip`.
 2. Drag **Scene Director.app** to Applications, or open it from the extracted folder.
 3. Open LM Studio, load a language model and start its local server. Use a vision-capable model for image uploads.
 4. Open Scene Director and click its connection status to set the server and model. All scene, two-subject, image-reference, image-change, prompt-rewrite and sampling controls are included.
 
 Apple Silicon (M1 or newer) and macOS 13 or newer are required. The build has been run on the development Mac; older supported macOS versions have not been tested. No separate Python, Node.js or terminal window is needed to use the app. LM Studio or another compatible model server is still required.
 
-This is a locally ad-hoc-signed test build, not a Developer ID-signed or Apple-notarized release. macOS may require approval in **System Settings → Privacy & Security → Open Anyway** on first launch. No security settings need to be disabled.
+The signed test download uses a Developer ID signature and Apple notarization, verified again after extracting the final ZIP. Its `.signing.json` report records the source revision and archive checksum. Ordinary local `build:mac` builds remain ad-hoc signed. See [code-signing.md](code-signing.md) for the signed build recipe. No security settings need to be disabled.
 
 Closing the window or choosing **Scene Director → Quit** stops the local app service and any generation still in progress. Previously finished batches stay saved. Opening the app again restores the text brief and interface choices. Uploaded images are held in memory and must be selected again.
 
@@ -30,7 +30,7 @@ These folders are outside the app bundle, so replacing the app does not replace 
 
 The **LoRA Dataset** tab prepares a batch of images for training: first crop/resize/rotate/flip in **Prepare images**, then generate and edit training captions in **Caption images**. Use an optional trigger token and a character/general/style/custom caption script. The prepared crop, not the uncropped original, is sent to your selected vision model when you start captioning. Nothing is automatically sent to Rewrite a prompt.
 
-**Export images + captions** opens a Save dialog for a ZIP containing prepared images and matching `.txt` captions. Every image needs a reviewed caption. Preparation changes mark existing captions for review, while newer manual text is protected from old model responses. Captioner JSON script import/export is compatible with CyberHub schema 1; plain `.txt` scripts and shared Vision presets also work.
+**Export images + captions** saves a ZIP or writes to a chosen folder with prepared images and matching `.txt` captions. Captions must match the current crop; the approved-only option requires approval before export. Preparation changes mark existing captions for review, while newer manual text is protected from old model responses. Captioner JSON script import/export is compatible with CyberHub schema 1; plain `.txt` scripts and shared Vision presets also work.
 
 The dataset session, including source image copies and manual edits, is saved locally under this app profile for recovery. Clear session removes its local copy, not your originals or exported datasets. Supported sources: PNG/JPEG/WebP, up to 100 MB and 40 megapixels each; up to 1,000 images and a 512 MB ZIP. Processed image exports are re-encoded and omit embedded metadata. The tool prepares training data; it does not train LoRAs. See the main README for detailed behavior.
 
@@ -54,12 +54,12 @@ From this `desktop` folder:
 
 ```sh
 python3 -m venv .venv
-.venv/bin/python -m pip install pyinstaller==6.22.3
+.venv/bin/python -m pip install -r requirements-build.txt
 npm ci
 npm run build:mac
 ```
 
-Output: `dist/3.7.0-beta.1/Scene Director-darwin-arm64/Scene Director.app`.
+Output: `dist/3.9.0-beta.1/Scene Director-darwin-arm64/Scene Director.app`.
 
 The custom app icon is in `assets/SceneDirector.icns`, with the original PNG and generation prompt alongside it. It was generated with built-in imagegen; macOS icon sizes were exported from that artwork. The web interface uses `../web/app-icon.png`.
 
@@ -70,7 +70,7 @@ Run the checks from the parent `Scene Director` folder:
 ```sh
 python3 -m unittest -q
 node --test desktop/*.test.cjs
-SCENE_DIRECTOR_TEST_BACKEND="$PWD/desktop/dist/3.7.0-beta.1/Scene Director-darwin-arm64/Scene Director.app/Contents/Resources/backend/scene-director-backend" python3 -m unittest test_desktop -q
+SCENE_DIRECTOR_TEST_BACKEND="$PWD/desktop/dist/3.9.0-beta.1/Scene Director-darwin-arm64/Scene Director.app/Contents/Resources/backend/scene-director-backend" python3 -m unittest test_desktop -q
 ```
 
 Desktop integration tests cover private-session access, bundled assets, both image-model profiles, vision input, saved settings, relaunch and shutdown during generation. They use temporary profiles and fake local model servers. Actual prompt quality and model compatibility depend on your selected model and were not evaluated using a live model for this build.

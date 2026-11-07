@@ -1,17 +1,23 @@
 {
   "name": "scene-director-desktop",
   "productName": "Scene Director",
-  "version": "3.7.0-beta.1",
+  "version": "3.9.0-beta.1",
   "description": "Scene Director \u2014 Apple Silicon desktop test",
   "author": "Scene Director",
   "private": true,
   "main": "main.cjs",
   "scripts": {
     "start": "electron .",
-    "build:mac": "node build-mac.cjs"
+    "build:mac": "node build-mac.cjs",
+    "prepare:mac": "node build-mac.cjs --prepare",
+    "sign:mac": "node sign-mac.cjs"
   },
   "devDependencies": {
     "@electron/packager": "20.3.0",
-    "electron": "45.2.3"
+    "electron": "45.2.3",
+    "electron-builder": "26.18.0"
+  },
+  "overrides": {
+    "minimatch@>=7.0.0 <11.0.1": "11.0.1"
   }
 }

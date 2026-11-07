@@ -124,7 +124,7 @@ function createWindow(localSession) {
   window.webContents.on('render-process-gone', () => {
     if (!quitting) { dialog.showErrorBox('Scene Director needs to reopen', 'The app window stopped. Quit and reopen Scene Director.'); app.quit(); }
   });
-  window.once('ready-to-show', () => window.show());
+  window.once('ready-to-show', () => { report('App window ready.'); window.show(); });
   window.once('closed', () => { window = null; });
   window.loadURL(APP_URL).catch(() => {
     if (!quitting) { dialog.showErrorBox('Could not open Scene Director', 'The app interface could not load. Please reopen the app.'); app.quit(); }

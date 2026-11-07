@@ -99,6 +99,8 @@ class DesktopTests(unittest.TestCase):
             self.assertEqual(self.call(route, body, token=None)[0], 403)
             self.assertEqual(self.call(route, body, token="wrong")[0], 403)
         self.assertEqual(self.call("/")[0], 200)
+        for route in ('/app.js','/app.css','/prompt-core.js','/dataset.js','/dataset-core.js','/dataset.css','/app-icon.png'):
+            self.assertEqual(self.call(route)[0], 200, route)
         self.assertEqual(self.call("/fonts/archivo.woff2")[0], 200)
         self.assertEqual(self.call("/settings.json")[0], 404)
         state = json.loads(self.call("/api/state")[1])
