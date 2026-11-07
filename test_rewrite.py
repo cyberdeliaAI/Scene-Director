@@ -98,6 +98,15 @@ class PresetTests(unittest.TestCase):
             file.write_text("New instructions.")
             self.assertEqual(presets.list_presets({"preset_dir": str(text)})["text"][-1]["prompt"], "New instructions.")
 
+    def test_windows_and_classic_line_endings_are_normalized_without_changing_file(self):
+        with tempfile.TemporaryDirectory() as folder:
+            path = Path(folder)/"windows.txt"
+            for raw in [b"First line.\r\nSecond line.\r\n", b"First line.\rSecond line.\r"]:
+                path.write_bytes(raw)
+                library = presets.list_presets({"preset_dir":folder})
+                self.assertEqual(library["text"][-1]["prompt"],"First line.\nSecond line.")
+                self.assertEqual(path.read_bytes(),raw)
+
     def test_unreadable_empty_oversize_and_external_symlink_are_skipped(self):
         with tempfile.TemporaryDirectory() as folder:
             root = Path(folder); shared = root / "presets"; shared.mkdir()

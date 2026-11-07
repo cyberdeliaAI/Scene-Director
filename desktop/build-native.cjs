@@ -19,7 +19,7 @@ async function main() {
   for (const file of ['main.cjs', 'preload.cjs', 'folder-picker.cjs', 'dataset-download.cjs', 'package.json']) fs.copyFileSync(path.join(__dirname, file), path.join(stage, file));
   fs.mkdirSync(path.join(build, 'spec'), { recursive: true });
   execFileSync(python, [
-    '-m', 'PyInstaller', '--noconfirm', '--clean', '--onedir', ...(process.platform === 'darwin' ? ['--target-architecture', process.arch] : []),
+    '-m', 'PyInstaller', '--noconfirm', '--clean', '--onedir', ...(process.platform === 'darwin' ? ['--target-architecture', process.arch === 'x64' ? 'x86_64' : 'arm64'] : []),
     '--name', 'scene-director-backend', '--distpath', path.join(build, 'python-dist'),
     '--workpath', path.join(build, 'python-work'), '--specpath', path.join(build, 'spec'),
     '--add-data', `${path.join(root, 'web')}${path.delimiter}web`,

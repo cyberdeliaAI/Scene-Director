@@ -539,8 +539,9 @@ class Cancelled(GenerationError):
 class CancellableRequests:
     """Interrupt blocking urllib requests, including waits for headers or stream data.
 
-    Keep a duplicate of each connected socket until the operation ends. Shutting
-    it down wakes blocked readers even after urllib hands the socket to a response.
+    Retain both the active socket and a duplicate until the operation ends.
+    Shutdown must reach the active Windows handle as well as the shared connection;
+    the duplicate remains usable after urllib transfers or wraps the original.
     urllib's redirect, proxy and TLS verification behavior stays in place.
     """
 
@@ -572,7 +573,7 @@ class CancellableRequests:
                 connected = create_socket(*args, **options)
                 try:
                     with self.lock:
-                        self.sockets.append(connected.dup())
+                        self.sockets.extend((connected, connected.dup()))
                     self.check()
                     return connected
                 except BaseException:
@@ -580,6 +581,17 @@ class CancellableRequests:
                     raise
 
             connection._create_connection = tracked_socket
+            connect = connection.connect
+
+            def tracked_connect():
+                connect()
+                # HTTPS wraps/detaches the raw socket. Keep its active SSL handle too.
+                with self.lock:
+                    if connection.sock is not None:
+                        self.sockets.append(connection.sock)
+                self.check()
+
+            connection.connect = tracked_connect
             return connection
         return create
 
