@@ -11,7 +11,11 @@ Its first run is selected explicitly by a trusted push whose commit message star
 with `Build signed macOS Apple Silicon test `. Only `main` and
 `scene-director-3.9` in this repository, pushed by its owner, are allowed. It also
 supports manual dispatch after registration. It does not run on pull-request events.
-The workflow uploads artifacts only; it does not publish or replace a release.
+The workflow uploads verified files to a private draft release; publishing it is
+a separate step. Existing releases and downloads are never replaced. Release
+assets avoid the account's Actions artifact-storage quota. The job has repository
+write permission for this final upload; dependency checkout does not retain Git
+credentials and only the upload step receives the GitHub token as an environment value.
 
 Dependencies, source checks and Python freezing run without signing credentials.
 Only the sign/notarize step receives the five secrets; final verification receives
