@@ -1,28 +1,45 @@
-# Scene Director for Apple Silicon — test build
+# Scene Director desktop
 
-Version **3.9.0-beta.2**, based on Scene Director 3.9.0. A self-contained Electron app with the existing English interface and a bundled Python service. It writes prompts; image changes produce a revised prompt or edit instruction, not an edited image file.
+Version **3.9.0**. The same English Prompt Studio and LoRA Dataset interface in its own desktop window, with a bundled Python service. Image changes produce revised prompts or edit instructions; the app does not generate image files or train LoRAs.
 
-## Install and use
+## Downloads and installation
 
-Download the standalone test bundle from the [private macOS test release](https://github.com/cyberdeliaAI/Scene-Director/releases/tag/v3.9.0-beta.2). This repository also includes the desktop source and build instructions.
+[Download the current release](https://github.com/cyberdeliaAI/Scene-Director/releases/tag/v3.9.0). Every archive has a SHA-256 file and a `.verification.json` report identifying the source revision and checks performed on the original and extracted app. `SHA256SUMS` covers all four downloads.
 
-1. Extract `Scene_Director_3.9.0-beta.2_macOS_arm64.zip`.
-2. Drag **Scene Director.app** to Applications, or open it from the extracted folder.
-3. Open LM Studio, load a language model and start its local server. Use a vision-capable model for image uploads.
-4. Open Scene Director and click its connection status to set the server and model. All scene, two-subject, image-reference, image-change, prompt-rewrite and sampling controls are included.
+| Platform | Download | Installation |
+| --- | --- | --- |
+| Apple Silicon, macOS 13+ | `scene-director-3.9.0-macos-arm64.zip` | Extract and move **Scene Director.app** to Applications. |
+| Intel, macOS 13+ | `scene-director-3.9.0-macos-x64.zip` | Extract and move **Scene Director.app** to Applications. |
+| Windows x64 | `scene-director-3.9.0-windows-x64.zip` | Extract the whole ZIP into a folder, then open **Scene Director.exe**. Keep its resources beside it. |
+| Linux x64 | `scene-director-3.9.0-linux-x64.tar.gz` | Extract the archive, open the **Scene Director** folder and run `./scene-director`. |
 
-Apple Silicon (M1 or newer) and macOS 13 or newer are required. The build has been run on the development Mac; older supported macOS versions have not been tested. No separate Python, Node.js or terminal window is needed to use the app. LM Studio or another compatible model server is still required.
+The Mac downloads are Developer ID signed and Apple-notarized, with stapled tickets and Gatekeeper verification. Windows and Linux downloads are not code-signed. Linux is built on Ubuntu 22.04 and needs a desktop environment with GTK 3, NSS, GBM and ALSA libraries; other distributions are not separately tested. The release checks use macOS 15, Windows Server 2022 and Ubuntu 22.04 runners; older supported Mac versions are not separately tested.
 
-The signed test download uses a Developer ID signature and Apple notarization, verified again after extracting the final ZIP. Its `.signing.json` report records the source revision and archive checksum. Ordinary local `build:mac` builds remain ad-hoc signed. See [code-signing.md](code-signing.md) for the signed build recipe. No security settings need to be disabled.
+No Python, Node.js or terminal window is needed for ordinary use. A compatible local model server such as LM Studio is still required. Use a vision-capable model for image workflows and captioning. Open the connection status in Scene Director to select the server and model.
 
-Closing the window or choosing **Scene Director → Quit** stops the local app service and any generation still in progress. Previously finished batches stay saved. Opening the app again restores the text brief and interface choices. Uploaded images are held in memory and must be selected again.
+### Homebrew on macOS
+
+```sh
+brew install --cask cyberdeliaAI/apps/scene-director
+```
+
+Homebrew chooses the native Intel or Apple Silicon archive and verifies its SHA-256. Quit Scene Director before updating:
+
+```sh
+brew update
+brew upgrade --cask cyberdeliaAI/apps/scene-director
+```
+
+If you installed the app manually, quit it and move the existing app aside before the first Homebrew installation. Do not use `--force` to overwrite it. The separate settings and saved work are retained.
+
+Closing the app stops its owned local service and active generation. Finished prompts remain saved. The brief and interface choices are restored on reopening; uploaded prompt-reference images must be selected again.
 
 ## Your files
 
-- Settings and saved API key: `~/Library/Application Support/Scene Director/settings.json` (readable only by your Mac account).
-- Interface choices: in the app's own local browser storage, under the same Application Support folder.
-- Default prompts folder: `~/Documents/Scene Director/prompts`. Change it in Settings.
-- Startup diagnostic log: `~/Library/Application Support/Scene Director/desktop.log`. It records service lifecycle messages, not uploaded images, prompts or API keys.
+- Settings and saved API key: macOS `~/Library/Application Support/Scene Director/settings.json`; Windows `%APPDATA%/Scene Director/settings.json`; Linux `~/.config/Scene Director/settings.json` (or `$XDG_CONFIG_HOME/Scene Director`).
+- Interface choices: in the app's own local browser storage, under the same platform-specific app profile.
+- Default prompts folder: `Documents/Scene Director/prompts` in your home folder. Change it in Settings.
+- Startup diagnostic log: `desktop.log` in that app profile. It records service lifecycle messages, not uploaded images, prompts or API keys.
 
 These folders are outside the app bundle, so replacing the app does not replace your data. The desktop app uses separate settings from the browser edition. Existing browser-edition prompt files and settings are not moved. Enter the same server/model/output folder in desktop Settings if you want to use that setup.
 
@@ -46,37 +63,34 @@ In **Settings → Shared prompt presets**, click **Choose folder…** beside eac
 
 **Refresh presets** updates the library, while retaining the instruction text already shown. Reselect an edited file to load its latest content. Editing the visible instructions creates a custom local copy. Built-in presets work without setting up shared folders. The app retains separate text and Vision instruction snapshots when it restarts.
 
-## Build on an Apple Silicon Mac
+## Build from source
 
-Build tools only: Python 3.9+ with an arm64 runtime, Node.js 22.12+ and the macOS command-line tools. The checked-in lockfile pins JavaScript dependencies. The Python build uses PyInstaller 6.22.3.
-
-From this `desktop` folder:
+Use a native 64-bit machine for each target, Python 3.13, Node.js 24 and the pinned build requirements. Mac signing requires Apple's command-line tools. Build dependencies are separate from the dependency-free browser edition.
 
 ```sh
-python3 -m venv .venv
-.venv/bin/python -m pip install -r requirements-build.txt
-npm ci
-npm run build:mac
+python3 -m venv desktop/.venv
+desktop/.venv/bin/python -m pip install -r desktop/requirements-build.txt
+npm ci --prefix desktop --ignore-scripts
+node desktop/node_modules/electron/install.js
+npm run build:native --prefix desktop
 ```
 
-Output: `dist/3.9.0-beta.2/Scene Director-darwin-arm64/Scene Director.app`.
+On Windows use `python` and `desktop/.venv/Scripts/python` instead. Unsigned local builds go into `desktop/dist/3.9.0/`. Local Mac builds have an ad-hoc signature; release Mac builds use the required Developer ID and notarization recipe in [code-signing.md](code-signing.md). `build:mac` remains a compatibility alias.
 
-The custom app icon is in `assets/SceneDirector.icns`, with the original PNG and generation prompt alongside it. It was generated with built-in imagegen; macOS icon sizes were exported from that artwork. The web interface uses `../web/app-icon.png`.
+`npm start --prefix desktop` uses the isolated venv; built apps always use their bundled backend. `SCENE_DIRECTOR_DESKTOP_DATA_DIR` and `SCENE_DIRECTOR_DESKTOP_OUTPUT_DIR` select disposable test locations. The custom PNG, macOS ICNS and Windows ICO are in `assets/` and use the same artwork.
 
-For source development, `npm start` uses the isolated `.venv` Python. The built `.app` always uses its bundled executable. `SCENE_DIRECTOR_DESKTOP_DATA_DIR` and `SCENE_DIRECTOR_DESKTOP_OUTPUT_DIR` can select disposable folders during testing; neither is needed for ordinary use.
-
-Run the checks from the parent `Scene Director` folder:
+From the repository root:
 
 ```sh
 python3 -m unittest -q
 node --test desktop/*.test.cjs
-SCENE_DIRECTOR_TEST_BACKEND="$PWD/desktop/dist/3.9.0-beta.2/Scene Director-darwin-arm64/Scene Director.app/Contents/Resources/backend/scene-director-backend" python3 -m unittest test_desktop -q
+python3 desktop/check_source_startup.py
 ```
 
-Desktop integration tests cover private-session access, bundled assets, both image-model profiles, vision input, saved settings, relaunch and shutdown during generation. They use temporary profiles and fake local model servers. Actual prompt quality and model compatibility depend on your selected model and were not evaluated using a live model for this build.
+The **Native builds** workflow builds on four matching runners, checks the frozen service, interface loading, renderer isolation, clean shutdown, architecture, licenses and portable HTTPS roots, then repeats the checks after extracting the final archive. Mac checks also verify all native signatures, hardened runtime, stapled tickets and Gatekeeper. Only complete matching verification reports allow all four downloads to become release candidates. Mock services are used; live model quality and real ComfyUI workflows are not evaluated by these checks.
 
 ## Desktop architecture
 
-Electron loads the interface at a stable private `scene-director://app/` origin so saved interface choices survive app restarts even though the service chooses a new free port. The main process forwards interface requests to the bundled service on loopback with a fresh session token. Ordinary browsers cannot access that private service without the token. Renderer Node.js access is disabled, context isolation and sandboxing are enabled, and external navigation/new windows are blocked. Only this app's own dataset ZIP and Captioner JSON blob downloads are allowed, through the native Save dialog; the requesting window and initiator origin are checked. The page has no Node.js or general filesystem access. Its isolated preload bridge exposes only a preset-folder picker, which returns the folder explicitly selected in a native dialog. The main process validates the requesting window, main frame, page and arguments.
+Electron loads the shared interface at a stable private `scene-director://app/` origin. Its main process forwards requests to an owned loopback service using a fresh session token. The renderer has sandboxing and context isolation enabled, with Node integration, webviews, external navigation and unsolicited permissions disabled. The isolated preload exposes only fixed native folder/file pickers; requesting page, frame, window and arguments are validated. Only this app's own dataset ZIP and Captioner JSON blob downloads are allowed through the native Save dialog.
 
-Implementation follows the official [Electron security guidance](https://www.electronjs.org/docs/latest/tutorial/security), [custom protocol documentation](https://www.electronjs.org/docs/latest/api/protocol) and [PyInstaller usage documentation](https://www.pyinstaller.org/en/stable/usage.html).
+An opt-in release smoke check runs with a separate disposable profile, verifies the real interface and exits through the ordinary service shutdown path. It is inactive for ordinary launches. No API keys, prompt bodies or uploaded images are written into build reports.

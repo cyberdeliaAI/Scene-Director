@@ -2,10 +2,11 @@
 import json
 import os
 from pathlib import Path
-import select
+import queue
 import subprocess
 import sys
 import tempfile
+import threading
 
 ROOT = Path(__file__).resolve().parent.parent
 
@@ -23,11 +24,14 @@ def main():
         process = subprocess.Popen([sys.executable,'-u','-c',code],env=env,cwd=folder,
                                    stdin=subprocess.PIPE,stdout=subprocess.PIPE,stderr=subprocess.PIPE)
         try:
-            if not select.select([process.stdout],[],[],25)[0]:
+            messages = queue.Queue()
+            threading.Thread(target=lambda: messages.put(process.stdout.readline()), daemon=True).start()
+            try:
+                ready = messages.get(timeout=25)
+            except queue.Empty:
                 process.kill(); process.wait(timeout=5)
                 print(process.stderr.read().decode(errors='replace'),flush=True)
                 raise RuntimeError('Desktop source did not report ready within 25 seconds.')
-            ready = process.stdout.readline()
             if not ready or json.loads(ready).get('type')!='ready':
                 raise RuntimeError('Desktop source exited without its ready message.')
             print('Private desktop source reported ready.',flush=True)

@@ -5,7 +5,7 @@ const { SIGNING_KEYS, signingEnvironment } = require('./build-utils.cjs');
 
 async function main() {
   const env = signingEnvironment();
-  if (process.arch !== 'arm64') throw new Error('This test build requires Apple Silicon.');
+  if (!['arm64', 'x64'].includes(process.arch)) throw new Error('Build with a native Apple Silicon or Intel runtime.');
   if (!fs.existsSync(path.join(__dirname, 'build/electron-source/package.json')) ||
       !fs.existsSync(path.join(__dirname, 'build/python-dist/scene-director-backend/scene-director-backend'))) {
     throw new Error('Run npm run prepare:mac before signing.');
@@ -14,7 +14,7 @@ async function main() {
   Object.assign(process.env, env);
   const { build, Platform, Arch } = require('electron-builder');
   await build({ projectDir:path.join(__dirname, 'build/electron-source'),
-    config:require('./electron-signed.cjs'), targets:Platform.MAC.createTarget('dir', Arch.arm64), publish:'never' });
+    config:require('./electron-signed.cjs'), targets:Platform.MAC.createTarget('dir', process.arch === 'arm64' ? Arch.arm64 : Arch.x64), publish:'never' });
   console.log('Developer ID signing and notarization finished. Final archive verification is still required.');
 }
 main().catch(error => {

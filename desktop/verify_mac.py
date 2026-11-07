@@ -1,18 +1,10 @@
-"""Verify a signed test app, then bind the extracted download and checksums to proof."""
-import argparse
-import hashlib
-import json
+"""Strict signature and notarization checks shared by both native Mac builds."""
 import os
 from pathlib import Path
-import platform
 import plistlib
 import re
-import shutil
 import ssl
 import subprocess
-import sys
-import tempfile
-import time
 
 ROOT = Path(__file__).resolve().parent.parent
 MACHO = {b'\xcf\xfa\xed\xfe', b'\xfe\xed\xfa\xcf', b'\xce\xfa\xed\xfe', b'\xfe\xed\xfa\xce',
@@ -37,15 +29,15 @@ def check_signature(path, team):
         raise RuntimeError('Missing hardened Developer ID signature or mismatched Apple team.')
 
 
-def verify_app(app, team, version):
+def verify_app(app, team, version, arch='arm64'):
     info = plistlib.loads((app/'Contents/Info.plist').read_bytes())
     if info.get('CFBundleShortVersionString') != version:
         raise RuntimeError('The app version does not match the test release.')
     if any(key.startswith('SCENE_DIRECTOR_') for key in info.get('LSEnvironment', {})):
         raise RuntimeError('Disposable test settings must not be embedded in the app.')
     executable = app/'Contents/MacOS'/info['CFBundleExecutable']
-    if run('lipo', '-archs', str(executable), capture_output=True, text=True).stdout.strip() != 'arm64':
-        raise RuntimeError('The test app is not Apple Silicon arm64.')
+    if run('lipo', '-archs', str(executable), capture_output=True, text=True).stdout.strip() != arch:
+        raise RuntimeError('The app has the wrong Mac architecture.')
     run('codesign', '--verify', '--deep', '--strict', str(app), capture_output=True)
     check_signature(app, team)
     signed = 0
@@ -85,76 +77,3 @@ def verify_app(app, team, version):
     run('xcrun', 'stapler', 'validate', str(app), capture_output=True)
     run('spctl', '--assess', '--type', 'execute', '--verbose=2', str(app), capture_output=True)
     return signed
-
-
-def check_runtime(app):
-    backend = app/'Contents/Resources/backend/scene-director-backend'
-    env = dict(plain_environment(), SCENE_DIRECTOR_TEST_BACKEND=str(backend))
-    subprocess.run([sys.executable,'-m','unittest','test_desktop','-q'], cwd=ROOT, env=env, check=True, timeout=180)
-    info = plistlib.loads((app/'Contents/Info.plist').read_bytes())
-    engine_version = info['CFBundleShortVersionString'].split('-')[0]
-    executable = app/'Contents/MacOS'/info['CFBundleExecutable']
-    with tempfile.TemporaryDirectory(prefix='scene-director-native-check-') as directory:
-        profile = Path(directory)/'profile'; profile.mkdir()
-        (profile/'settings.json').write_text(json.dumps({'api_url':'http://127.0.0.1:9/v1', 'model':'',
-                                                        'output_dir':str(Path(directory)/'prompts')}))
-        env = dict(plain_environment(), SCENE_DIRECTOR_DESKTOP_DATA_DIR=str(profile))
-        with (Path(directory)/'launch.log').open('wb') as log:
-            process = subprocess.Popen([str(executable)], env=env, stdout=log, stderr=log)
-            try:
-                deadline = time.monotonic()+40
-                while time.monotonic() < deadline:
-                    if process.poll() is not None:
-                        raise RuntimeError('The native app exited during its isolated startup check.')
-                    status = profile/'desktop.log'
-                    text = status.read_text() if status.exists() else ''
-                    if f'Local service ready ({engine_version}).' in text and 'App window ready.' in text:
-                        break
-                    time.sleep(0.1)
-                else:
-                    raise RuntimeError('The signed native window did not become ready.')
-            finally:
-                process.terminate()
-                try:
-                    process.wait(timeout=10)
-                except subprocess.TimeoutExpired:
-                    process.kill(); process.wait(timeout=5)
-
-
-def main():
-    parser = argparse.ArgumentParser()
-    parser.add_argument('--app', type=Path, required=True)
-    args = parser.parse_args()
-    team = os.environ.get('APPLE_TEAM_ID', '')
-    if sys.platform != 'darwin' or platform.machine() != 'arm64' or not re.fullmatch(r'[A-Z0-9]{10}', team):
-        parser.error('Verification requires an Apple Silicon Mac and APPLE_TEAM_ID.')
-    version = json.loads((ROOT/'desktop/package.json').read_text())['version']
-    app = args.app.resolve()
-    signed = verify_app(app, team, version)
-    check_runtime(app)
-    artifacts = ROOT/'desktop/dist'/version/'artifacts'; artifacts.mkdir(parents=True, exist_ok=True)
-    with tempfile.TemporaryDirectory(prefix='scene-director-release-') as directory:
-        release = Path(directory)/'Scene Director macOS Test'; release.mkdir()
-        run('ditto', str(app), str(release/'Scene Director.app'))
-        shutil.copy2(ROOT/'desktop/README.md',release/'README.md')
-        shutil.copy2(ROOT/'desktop/code-signing.md',release/'code-signing.md')
-        archive = artifacts/f'Scene_Director_{version}_macOS_arm64.zip'
-        run('ditto','-c','-k','--sequesterRsrc','--keepParent',str(release),str(archive))
-    with tempfile.TemporaryDirectory(prefix='scene-director-extracted-') as directory:
-        run('ditto','-x','-k',str(archive),directory)
-        extracted = Path(directory)/'Scene Director macOS Test/Scene Director.app'
-        verify_app(extracted, team, version)
-        check_runtime(extracted)
-    digest = hashlib.sha256(archive.read_bytes()).hexdigest()
-    archive.with_name(archive.name+'.sha256').write_text(digest+'  '+archive.name+'\n')
-    commit = run('git','rev-parse','HEAD',cwd=ROOT,capture_output=True,text=True).stdout.strip()
-    report = {'version':version, 'source_commit':commit, 'archive':archive.name, 'sha256':digest,
-              'arch':'arm64','developer_id':True,'hardened_runtime':True,'nested_native_files_verified':signed,
-              'stapled_notarization_ticket':True,'gatekeeper':True,'bundled_service_tests':True,
-              'native_window_started':True,'extracted_archive_verified':True,'portable_https_roots':True}
-    archive.with_name(archive.stem+'.signing.json').write_text(json.dumps(report,indent=2)+'\n')
-    print('Verified signed and notarized Apple Silicon archive: '+archive.name)
-
-
-if __name__ == '__main__':
-    main()

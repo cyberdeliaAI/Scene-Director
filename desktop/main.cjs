@@ -35,11 +35,11 @@ function report(message) {
 
 function startBackend() {
   return new Promise((resolve, reject) => {
-    const bundled = path.join(process.resourcesPath, 'backend', 'scene-director-backend');
-    const command = app.isPackaged ? bundled : path.join(__dirname, '.venv', 'bin', 'python');
+    const bundled = path.join(process.resourcesPath, 'backend', process.platform === 'win32' ? 'scene-director-backend.exe' : 'scene-director-backend');
+    const command = app.isPackaged ? bundled : path.join(__dirname, '.venv', process.platform === 'win32' ? 'Scripts' : 'bin', process.platform === 'win32' ? 'python.exe' : 'python');
     const args = app.isPackaged ? [] : ['-u', path.join(__dirname, '..', 'scene_director_desktop.py')];
     backend = spawn(command, args, {
-      cwd: dataDir,
+      cwd: dataDir, windowsHide:true,
       stdio: ['pipe', 'pipe', 'pipe'],
       env: { ...process.env, PYTHONUTF8: '1', PYTHONIOENCODING: 'utf-8',
         SCENE_DIRECTOR_DESKTOP_TOKEN: token, SCENE_DIRECTOR_DESKTOP_DATA_DIR: dataDir },
@@ -112,7 +112,7 @@ async function installProtocol() {
 function createWindow(localSession) {
   window = new BrowserWindow({
     width: 1400, height: 940, minWidth: 860, minHeight: 640,
-    title: 'Scene Director', backgroundColor: '#1c1f26', show: false,
+    title: 'Scene Director', icon:path.join(__dirname,'app-icon.png'), backgroundColor: '#1c1f26', show: false,
     webPreferences: { session: localSession, preload: path.join(__dirname, 'preload.cjs'), nodeIntegration: false,
       contextIsolation: true, sandbox: true, webSecurity: true, webviewTag: false,
       devTools: !app.isPackaged, navigateOnDragDrop: false },
@@ -124,7 +124,25 @@ function createWindow(localSession) {
   window.webContents.on('render-process-gone', () => {
     if (!quitting) { dialog.showErrorBox('Scene Director needs to reopen', 'The app window stopped. Quit and reopen Scene Director.'); app.quit(); }
   });
-  window.once('ready-to-show', () => { report('App window ready.'); window.show(); });
+  window.once('ready-to-show', async () => {
+    report('App window ready.'); window.show();
+    // Opt-in release verification uses only an explicitly isolated profile.
+    if (process.env.SCENE_DIRECTOR_DESKTOP_SMOKE_REPORT && process.env.SCENE_DIRECTOR_DESKTOP_DATA_DIR) {
+      try {
+        const loaded = await window.webContents.executeJavaScript(`({
+          page: location.protocol === 'scene-director:' && !!document.querySelector('#promptWorkspace'),
+          dataset: !!document.querySelector('#dsCanvas'),
+          styles: getComputedStyle(document.querySelector('.app')).display === 'grid'
+        })`);
+        const prefs = window.webContents.getLastWebPreferences();
+        const result = { ...loaded, version:app.getVersion(), platform:process.platform, arch:process.arch,
+          sandbox:prefs.sandbox, contextIsolation:prefs.contextIsolation, nodeIntegration:prefs.nodeIntegration };
+        result.ok = result.page && result.dataset && result.styles && result.sandbox && result.contextIsolation && !result.nodeIntegration;
+        fs.writeFileSync(process.env.SCENE_DIRECTOR_DESKTOP_SMOKE_REPORT, JSON.stringify(result));
+      } catch { report('Isolated interface check failed.'); }
+      app.quit();
+    }
+  });
   window.once('closed', () => { window = null; });
   window.loadURL(APP_URL).catch(() => {
     if (!quitting) { dialog.showErrorBox('Could not open Scene Director', 'The app interface could not load. Please reopen the app.'); app.quit(); }
@@ -132,15 +150,16 @@ function createWindow(localSession) {
 }
 
 Menu.setApplicationMenu(Menu.buildFromTemplate([
-  { label: 'Scene Director', submenu: [{ role: 'about' }, { type: 'separator' },
-    { role: 'hide' }, { role: 'hideOthers' }, { role: 'unhide' }, { type: 'separator' }, { role: 'quit' }] },
+  ...(process.platform === 'darwin' ? [{ label: 'Scene Director', submenu: [{ role: 'about' }, { type: 'separator' },
+    { role: 'hide' }, { role: 'hideOthers' }, { role: 'unhide' }, { type: 'separator' }, { role: 'quit' }] }] :
+    [{ label:'File', submenu:[{ role:'quit' }] }]),
   { role: 'editMenu' },
   { label: 'View', submenu: [{ role: 'resetZoom' }, { role: 'zoomIn' }, { role: 'zoomOut' },
     { type: 'separator' }, { role: 'togglefullscreen' }] },
   { role: 'windowMenu' },
 ]));
 app.setAboutPanelOptions({ applicationName: 'Scene Director', applicationVersion: app.getVersion(),
-  version: 'Apple Silicon test', copyright: 'Prompt writing for Krea 2 and Z-Image Turbo' });
+  version: process.platform === 'darwin' ? (process.arch === 'arm64' ? 'Apple Silicon' : 'Intel') : process.platform === 'win32' ? 'Windows x64' : 'Linux x64', copyright: 'Prompt writing for Krea 2 and Z-Image Turbo' });
 
 if (!app.requestSingleInstanceLock()) {
   app.quit();
