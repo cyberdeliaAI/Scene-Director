@@ -11,7 +11,7 @@ Give a direction. Get distinct, surprising image prompts for **Krea 2** and **Z-
 
 Scene Director asks a local language model to invent the scenes for you. You set a subject and a direction like `jobs` or `sport`. The model picks different moments, places, clothing, framing and light for every prompt, within the limits you set. Prompts are always English, even when your brief is Dutch.
 
-Version 3.9.0. Python 3.9 or newer. No packages to install.
+Version 3.9.1. Python 3.9 or newer. No packages to install.
 
 Standalone desktop downloads are available for **macOS Apple Silicon**, **macOS Intel**, **Windows x64** and **Linux x64**. [Download Scene Director 3.9.0](https://github.com/cyberdeliaAI/Scene-Director/releases/tag/v3.9.0). Python is included; no Python or Node.js installation is required. Both Mac apps are Developer ID signed and Apple-notarized. Windows and Linux downloads are portable archives. See [desktop/README.md](desktop/README.md) for installation, system requirements and build instructions. The browser launchers remain available.
 
@@ -265,7 +265,7 @@ python3 scene_director.py --help
 | `settings.json` | Created when you save connection settings. Holds your API key if you saved one, so do not share it. |
 | `briefs.json`, `caption_scripts.json` | Saved briefs and saved caption scripts, next to `settings.json`. |
 
-## Changes since 3.9.0
+## What changed in 3.9.1
 
 - Rotating fixed choices stay attached to the prompt they were written for. A rejected draft no longer shifts the labels of later prompts, and its choice is requested again so the spread stays even.
 - The browser edition opens through a private link per start and keeps it in a strict session cookie. Without it the page and the API refuse access.

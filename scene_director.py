@@ -32,7 +32,7 @@ from datetime import datetime
 from pathlib import Path
 
 APP_NAME = "Scene Director"
-VERSION = "3.9.0"
+VERSION = "3.9.1"
 
 
 def _env(name, default=""):
