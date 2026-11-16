@@ -66,9 +66,13 @@ SAMPLING_DEFAULTS = {"temperature": TEMPERATURE, "top_p": TOP_P, **EXTRA_PARAMS}
 PRECISE_DEFAULTS = {"temperature": 0.3, "top_p": 0.9, "top_k": 20, "presence_penalty": 0.0,
                     "reasoning_effort": "none", "chat_template_kwargs": {"enable_thinking": False}}
 PRECISE_WORKFLOWS = ("change_image", "rewrite", "dataset_caption", "edit_prompt")
-# Retry without optional controls only when the error is plausibly about one of them.
-OPTIONAL_REJECTED_RE = re.compile(r"top_k|presence_penalty|reasoning|chat_template|enable_thinking|unsupported|"
-                                  r"unrecognized|unknown|not (?:allowed|permitted|supported)|extra (?:fields|inputs)", re.I)
+# Retry without optional controls only when the error is about a request field, not about
+# the model, the image or the key ("Unknown model" or "does not support images" must not match).
+OPTIONAL_REJECTED_RE = re.compile(
+    r"top_k|presence_penalty|reasoning|chat_template|enable_thinking"
+    r"|\b(?:unsupported|unrecognized|unknown|unexpected)\s+(?:request\s+)?(?:parameter|param|field|argument|property|keyword)s?\b"
+    r"|\b(?:parameter|param|field|argument|property)s?\s+(?:\S+\s+){0,2}(?:is|are)\s+not\s+(?:allowed|permitted|supported)"
+    r"|\bextra\s+(?:fields|inputs|arguments)", re.I)
 MAX_SEED_SCENES = 300
 STOPWORDS = frozenset("""with that this their there these those from into onto over under while where which when
 what have has been being they them then than very each some other about above below between through across along
@@ -359,7 +363,7 @@ def brief_system_prompt(brief):
     return prompt
 
 
-def build_user_message(brief, count, previous_scenes, feedback=None, offset=0):
+def build_user_message(brief, count, previous_scenes, feedback=None, offset=0, choices=None):
     if brief.workflow == "edit_prompt":
         return json.dumps({"original_prompt": brief.source_prompt,
                            "requested_changes": brief.changes}, ensure_ascii=False, indent=2)
@@ -392,7 +396,8 @@ def build_user_message(brief, count, previous_scenes, feedback=None, offset=0):
     if len(previous) > 30:
         # Older scenes as short topics, so long runs keep avoiding them in a small context.
         data["earlier_scene_topics"] = [" ".join(note.split()[:8]) for note in previous[:-30]][-150:]
-    choices = per_prompt_choices(brief.parameters, count, offset)
+    if choices is None:
+        choices = per_prompt_choices(brief.parameters, count, offset)
     if choices:
         data["per_prompt_choices"] = choices
     if brief.second_subject:
@@ -420,7 +425,8 @@ class GenerationError(Exception):
 def image_mime(raw):
     if raw.startswith(b"\x89PNG\r\n\x1a\n") and len(raw) >= 33 and raw[12:16] == b"IHDR":
         return "image/png"
-    if raw.startswith(b"\xff\xd8\xff") and raw.endswith(b"\xff\xd9"):
+    # Some cameras and editors append data after the end marker. A cut-off file usually has none.
+    if raw.startswith(b"\xff\xd8\xff") and raw.rfind(b"\xff\xd9") > 2:
         return "image/jpeg"
     if len(raw) >= 20 and raw[:4] == b"RIFF" and raw[8:12] == b"WEBP":
         return "image/webp"
@@ -511,13 +517,19 @@ def sampling_profile(workflow):
     return "precise" if workflow in PRECISE_WORKFLOWS else "creative"
 
 
-def saved_sampling(path=None, profile="creative"):
+def saved_sampling(path=None, profile="creative", fallback=False):
+    """Saved generation settings. With fallback, invalid saved values give the defaults instead of an error."""
     try:
         data = json.loads(Path(path or SETTINGS_FILE).read_text(encoding="utf-8"))
     except (OSError, ValueError):
         data = {}
     key, defaults = ("sampling_precise", PRECISE_DEFAULTS) if profile == "precise" else ("sampling", SAMPLING_DEFAULTS)
-    return validate_sampling(data.get(key) if isinstance(data, dict) else None, defaults=defaults)
+    try:
+        return validate_sampling(data.get(key) if isinstance(data, dict) else None, defaults=defaults)
+    except GenerationError:
+        if not fallback:
+            raise
+        return validate_sampling(defaults=defaults)
 
 
 class ApiError(GenerationError):
@@ -1089,8 +1101,12 @@ def _plain_text_prompts(text):
     return prompts
 
 
-def parse_reply(text, min_words=MIN_PROMPT_WORDS):
-    """Return a list of (idea or None, prompt) pairs from a model reply."""
+def parse_reply_positions(text, min_words=MIN_PROMPT_WORDS):
+    """Return (position, idea or None, prompt) for each usable prompt in a model reply.
+
+    The position is the prompt's place among the prompts the model wrote. Rotating
+    choices are requested by position, so a skipped draft must not shift later ones.
+    """
     text = strip_reasoning(text)
     text = FENCE_END_RE.sub("", FENCE_START_RE.sub("", text)).strip()
     value = _load_json(text)
@@ -1105,19 +1121,25 @@ def parse_reply(text, min_words=MIN_PROMPT_WORDS):
         # Malformed or truncated JSON: keep only complete prompt strings.
         prompts, ideas = _salvage_strings(text, "prompts"), _salvage_strings(text, "ideas")
     else:
-        prompts = _plain_text_prompts(text)
+        # Plain text: an introduction line is not a prompt and must not take a position.
+        prompts = [block for block in _plain_text_prompts(text) if len(clean_prompt(block).split()) >= min_words]
     if not isinstance(prompts, list):
         return []
     if not (isinstance(ideas, list) and len(ideas) >= len(prompts)):
         ideas = [None] * len(prompts)
-    pairs = []
-    for idea, prompt in zip(ideas, prompts):
+    found = []
+    for position, (idea, prompt) in enumerate(zip(ideas, prompts)):
         if not isinstance(prompt, str):
             continue
         prompt = clean_prompt(prompt)
         if len(prompt.split()) >= min_words:
-            pairs.append((clean_prompt(idea) if isinstance(idea, str) and idea.strip() else None, prompt))
-    return pairs
+            found.append((position, clean_prompt(idea) if isinstance(idea, str) and idea.strip() else None, prompt))
+    return found
+
+
+def parse_reply(text, min_words=MIN_PROMPT_WORDS):
+    """Return a list of (idea or None, prompt) pairs from a model reply."""
+    return [(idea, prompt) for _, idea, prompt in parse_reply_positions(text, min_words)]
 
 
 def parse_prompts(text):
@@ -1129,7 +1151,8 @@ def fingerprint(prompt):
 
 
 IDENTITY_RE = re.compile(
-    r"\b(?:her|his|their)\s+(?:[\w-]+\s+){0,3}(?:hair|hairstyle|ponytail|braid|braids|bun|curls|freckles|tattoos?)\b"
+    r"\b(?:her|his|their)\s+(?:[\w-]+\s+){0,3}(?:hair|hairstyle|ponytail|braid|braids|curls|freckles|tattoos?)\b"
+    r"|\b(?:her|his|their)\s+(?:(?:messy|neat|tight|loose|low|high|top|sleek|small|twisted|braided)\s+)?bun\b"
     r"|\bhair\s+(?:pulled|tied|falling|flowing|tucked|swept|cropped|pinned)\b"
     r"|\b(?:blonde|brunette|red-haired|redheaded|grey-haired|gray-haired|silver-haired)\b"
     r"|\b(?:blue|green|brown|hazel|grey|gray|amber)(?:-eyed|\s+eyes)\b"
@@ -1137,9 +1160,28 @@ IDENTITY_RE = re.compile(
     re.I)
 
 
+# Eye, hair and skin colors of animals or figures are not a person's identity.
+NOT_A_PERSON = (r"(?:dogs?|pupp(?:y|ies)|cats?|kittens?|spaniels?|retrievers?|terriers?|huskies|husky|collies?|poodles?|"
+                r"labradors?|beagles?|hounds?|horses?|ponies|pony|foals?|mares?|birds?|owls?|hawks?|parrots?|goats?|sheep|"
+                r"lambs?|cows?|calf|calves|foxes|fox|wolves|wolf|rabbits?|hares?|deer|fawns?|ferrets?|pigs?|piglets?|"
+                r"donkeys?|mules?|tabby|dolls?|figurines?|statues?|mannequins?|puppets?)")
+NOT_A_PERSON_AFTER_RE = re.compile(NOT_A_PERSON + r"[.,;:!?]?", re.I)
+NOT_A_PERSON_BEFORE_RE = re.compile(r"\b" + NOT_A_PERSON + r"(?:(?:'s|\u2019s)|\s+(?:with|has|have)(?:\s+[\w-]+){0,2})\s+$", re.I)
+
+
 def identity_violation(prompt, mode):
-    """Catch clear LoRA identity leaks without blocking hats, hairdressing or tattoo work."""
-    return mode == "lora" and bool(IDENTITY_RE.search(prompt))
+    """Catch clear LoRA identity leaks without blocking hats, hairdressing, tattoo work or animals."""
+    if mode != "lora":
+        return False
+    for match in IDENTITY_RE.finditer(prompt):
+        before = prompt[:match.start()]
+        if re.match(r"(?:her|his|their|hair)\b", match.group(0), re.I) or re.search(r"\b(?:her|his|their)\s+$", before, re.I):
+            return True  # attached to a person by a pronoun or by "hair ..."
+        following = (prompt[match.end():].split() or [""])[0]
+        if NOT_A_PERSON_AFTER_RE.fullmatch(following) or NOT_A_PERSON_BEFORE_RE.search(before):
+            continue  # "a hazel-eyed spaniel", "a cat with green eyes", "the dog's amber eyes"
+        return True
+    return False
 
 
 def brief_identity_violation(prompt, brief):
@@ -1153,16 +1195,21 @@ def brief_identity_violation(prompt, brief):
 
 
 def has_prompt_metadata(prompt):
-    return bool(re.search(r"\blora\b|\bidentity_mode\b|\bsubject\s*[12]\b|\btrigger word\b", prompt, re.I))
+    # "LoRA", "lora" and "LORA" are metadata. "Lora" is usually a name, as in "Lora kneads dough".
+    return bool(re.search(r"\b(?:LoRA|LORA|lora|LoRa)s?\b", prompt)
+                or re.search(r"\bidentity_mode\b|\bsubject\s*[12]\b|\btrigger word\b", prompt, re.I))
 
 
 NONVISUAL_RE = re.compile(
-    r"\b(?:hums?|humming|whirs?|whirring|buzzing|rumbl(?:e|es|ing)|clatter(?:s|ing)?|crackl(?:e|es|ing)|"
-    r"echo(?:es|ing)|sounds?\s+of|silence|"
+    r"\b(?:hums?|humming|whirs?|whirring|rumbl(?:e|es|ing)|clatter(?:s|ing)?|sounds?\s+of|silence|"
+    # "a buzzing market" means busy, "crackle glaze" is a ceramic finish, "echoes the curve" is visual.
+    r"buzzing(?!\s+(?:market|street|crowd|city|square|plaza|caf[eé]|bar|room|hall|terrace|kitchen|office|hub|dance\s+floor)s?\b)|"
+    r"crackl(?:e|es|ing)(?!\s+(?:glaze|glazed|finish|pattern|texture|paint|varnish|lacquer|effect)s?\b)|"
+    r"echo(?:es|ing)?(?:\s+(?:through|across|off|around|along|down|from|in)\b|(?=\s*[.,;!]))|"
     r"smells?|smelling|scents?|aromas?|odou?rs?|fragrance|"
     r"the\s+air\s+(?:feels|is\s+thick|smells|hangs\s+heavy)|"
     r"feels?\s+(?:heavy|calm|tense|peaceful|alive|electric|warm|cold|cool|still)|"
-    r"the\s+viewer|viewer's|immers(?:e|es|ing|ive)|"
+    r"the\s+viewer|viewer's|immersive|immers(?:e|es|ing)\s+(?:the\s+)?(?:viewer|audience|you)|"
     r"captures?\s+the\s+(?:essence|intensity|spirit|moment|feeling|quiet)|"
     r"sense\s+of\s+(?:calm|urgency|purpose|peace|serenity|wonder|focus|pride))\b",
     re.I)
@@ -1261,12 +1308,14 @@ def request_record(brief, count):
     return record
 
 
-def save_record(out, brief, count, model, sampling, created, ideas, prompts):
+def save_record(out, brief, count, model, sampling, created, ideas, prompts, choices=None):
     """Write the run's brief, model and settings next to its .txt file. Best effort."""
     path = Path(out).with_suffix(".json")
+    if choices is None:
+        choices = per_prompt_choices(brief.parameters, len(prompts))
     data = {"app": APP_NAME, "version": VERSION, "created": created, "model": model, "sampling": sampling,
             "request": request_record(brief, count), "count": len(prompts), "ideas": list(ideas),
-            "prompts": list(prompts), "choices": per_prompt_choices(brief.parameters, len(prompts))}
+            "prompts": list(prompts), "choices": list(choices)}
     temporary = path.with_name(path.name + ".tmp")
     temporary.write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     temporary.replace(path)
@@ -1435,7 +1484,7 @@ def run(brief, count, client, emit, batch_size=BATCH_SIZE, output_dir=OUTPUT_DIR
     if brief.workflow in ("rewrite", "dataset_caption", "edit_prompt"):
         return run_rewrite(brief, count, client, emit, output_dir, live)
     prompts, notes, seen, feedback = [], list(brief.seed_scenes)[-MAX_SEED_SCENES:], set(), []
-    ideas_out, accepted = [], []
+    ideas_out, accepted, choices_out = [], [], []
     out, saved = None, 0
     client.notify = lambda message: emit({"type": "notice", "level": "info", "message": message})
     try:
@@ -1453,21 +1502,29 @@ def run(brief, count, client, emit, batch_size=BATCH_SIZE, output_dir=OUTPUT_DIR
               "creativity": brief.creativity, "count": count, "file": str(out) if out else None,
               "workflow": brief.workflow, "output_kind": brief.edit_output})
         system = brief_system_prompt(brief)
+        # Every requested prompt is a slot with its rotating choices. A rejected draft
+        # leaves its slot open for the next batch, so labels stay true and the spread even.
+        rotation = per_prompt_choices(brief.parameters, count)
+        open_slots = list(range(count))
         stalled = 0
         while len(prompts) < count:
             n = min(batch_size, count - len(prompts))
+            batch_slots = open_slots[:n]
+            batch_choices = [rotation[slot] for slot in batch_slots] if rotation else None
             emit({"type": "batch", "first": len(prompts) + 1, "last": len(prompts) + n,
                   "attempt": stalled + 1, "live": live})
             buffer = DeltaBuffer(emit) if live else None
             try:
-                reply = client.chat(system, build_user_message(brief, n, notes, feedback, offset=len(prompts)),
+                reply = client.chat(system, build_user_message(brief, n, notes, feedback, choices=batch_choices),
                                     max_tokens_for(n, brief.scene_mode), buffer, brief.reference)
             finally:
                 if buffer:
                     buffer.flush()
             added, feedback = 0, []
             min_words = 6 if brief.workflow == "change_image" and brief.edit_output == "edit_instruction" else MIN_PROMPT_WORDS
-            for idea, prompt in parse_reply(reply, min_words=min_words):
+            for position, idea, prompt in parse_reply_positions(reply, min_words=min_words):
+                if rotation and position >= n:
+                    continue  # an extra draft was written without requested choices
                 if has_prompt_metadata(prompt):
                     feedback.append("Remove LoRA or identity notes and numbered subject labels. Write only the visible scene.")
                     emit({"type": "notice", "level": "warn",
@@ -1493,15 +1550,18 @@ def run(brief, count, client, emit, batch_size=BATCH_SIZE, output_dir=OUTPUT_DIR
                     continue
                 seen.add(key)
                 accepted.append((content_words(prompt), content_words(idea)))
+                choice = {}
+                if rotation:
+                    choice = rotation[batch_slots[position]]
+                    open_slots.remove(batch_slots[position])
                 text = with_prefix(brief.output_prefix, prompt) if brief.workflow == "scenes" else prompt
                 prompts.append(text)
                 ideas_out.append(idea or "")
+                choices_out.append(choice)
                 notes.append(scene_note(idea, prompt))
                 added += 1
-                choices = per_prompt_choices(brief.parameters, 1, len(prompts) - 1)
                 emit({"type": "prompt", "index": len(prompts), "idea": idea, "text": text,
-                      "choices": choices[0] if choices else {},
-                      "words": len(text.split())})
+                      "choices": choice, "words": len(text.split())})
                 if added == n:
                     break
             feedback = sorted(set(feedback))
@@ -1511,7 +1571,8 @@ def run(brief, count, client, emit, batch_size=BATCH_SIZE, output_dir=OUTPUT_DIR
                     save_prompts(out, prompts)
                     saved = len(prompts)
                     try:
-                        save_record(out, brief, count, model, client.sampling, created, ideas_out, prompts)
+                        save_record(out, brief, count, model, client.sampling, created, ideas_out, prompts,
+                                    choices_out if rotation else None)
                     except OSError:
                         emit({"type": "notice", "level": "info", "message": "The run details could not be saved next to the prompt file."})
                     emit({"type": "saved", "file": str(out), "count": saved})
@@ -1804,7 +1865,9 @@ def run_request(path, emit, live=True):
         raw = sys.stdin.read() if path == "-" else Path(path).read_text(encoding="utf-8")
         data = json.loads(raw)
         brief, count, settings = request_from_json(data)
-        settings["sampling"] = validate_sampling(data.get("sampling"), base=saved_sampling(profile=sampling_profile(brief.workflow)))
+        # The web service always sends complete settings; a broken settings file must not block its runs.
+        base = saved_sampling(profile=sampling_profile(brief.workflow), fallback=True)
+        settings["sampling"] = validate_sampling(data.get("sampling"), base=base)
     except (OSError, ValueError, GenerationError) as exc:
         emit({"type": "error", "message": str(exc), "file": None, "saved": 0})
         return 2

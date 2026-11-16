@@ -16,7 +16,7 @@ async function main() {
   const stage = path.join(build, 'electron-source');
   fs.mkdirSync(stage, { recursive: true });
   fs.copyFileSync(path.join(root, 'web/app-icon.png'), path.join(stage, 'app-icon.png'));
-  for (const file of ['main.cjs', 'preload.cjs', 'folder-picker.cjs', 'dataset-download.cjs', 'package.json']) fs.copyFileSync(path.join(__dirname, file), path.join(stage, file));
+  for (const file of ['main.cjs', 'preload.cjs', 'folder-picker.cjs', 'dataset-download.cjs', 'diagnostic.cjs', 'package.json']) fs.copyFileSync(path.join(__dirname, file), path.join(stage, file));
   fs.mkdirSync(path.join(build, 'spec'), { recursive: true });
   execFileSync(python, [
     '-m', 'PyInstaller', '--noconfirm', '--clean', '--onedir', ...(process.platform === 'darwin' ? ['--target-architecture', process.arch === 'x64' ? 'x86_64' : 'arm64'] : []),
@@ -45,7 +45,7 @@ async function main() {
     icon: path.join(__dirname, 'assets', process.platform === 'win32' ? 'SceneDirector.ico' : process.platform === 'darwin' ? 'SceneDirector.icns' : 'SceneDirector.png'),
     electronVersion: require('./package.json').devDependencies.electron,
     out: path.join(__dirname, 'dist', version), overwrite: true, asar: true,
-    appBundleId: 'com.scenedirector.desktop.test', appVersion: version, buildVersion: version.split('-')[0],
+    appBundleId: 'nl.cyberdelia.scenedirector', appVersion: version, buildVersion: version.split('-')[0],
     appCopyright: 'Scene Director',
     extendInfo: { LSMinimumSystemVersion: '13.0', NSHighResolutionCapable: true,
       NSHumanReadableCopyright: 'Scene Director',

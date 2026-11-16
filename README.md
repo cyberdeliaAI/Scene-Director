@@ -31,7 +31,7 @@ Quit the app before upgrading. Settings, saved prompts and dataset sessions are 
    - **macOS:** double-click `Start Scene Director.command`. The first time, macOS may block it: right-click it, choose Open, then Open again.
    - **Windows:** double-click `Start Scene Director.bat`.
    - **Linux or terminal:** run `python3 scene_director.py`.
-4. Your browser opens the interface. The status at the top shows which model is connected. Click it to change the server, the model or the output folder.
+4. Your browser opens the interface through a private link that is new every time Scene Director starts. Other programs and users on this computer cannot use the app without it. The status at the top shows which model is connected. Click it to change the server, the model or the output folder.
 
 Keep the small terminal window open while you work. Close it, or press Ctrl+C in it, to quit.
 
@@ -244,7 +244,9 @@ python3 scene_director.py --help
 | "The model spent its whole token budget thinking" | Switch thinking off for that model in LM Studio, or use an instruct model. |
 | Repeated empty or malformed replies | Try another model, a broader direction or fewer fixed choices. |
 | "No free port found" | Start with another port: `python3 scene_director.py --port 8790`. |
-| The browser does not open | Open the address printed in the terminal window yourself. |
+| The browser does not open | Copy the full address printed in the terminal window, including `?token=…`, into your browser. |
+| "Open Scene Director from its window" or "belongs to an earlier Scene Director session" | Scene Director was restarted, or the address was opened without its private link. Start it again from its launcher or use the address it printed. |
+| "Saved generation settings were invalid" | `settings.json` holds a value outside the allowed range. The defaults are used until you open Settings and press Save. |
 
 ## Files
 
@@ -259,8 +261,24 @@ python3 scene_director.py --help
 | `web/app.js`, `web/app.css` | Prompt Studio script and styles. |
 | `web/dataset.js`, `web/dataset-core.js`, `web/dataset.css` | The LoRA Dataset tool and its tested core functions. |
 | `test_features.py` | Tests for the 3.9 features. |
+| `test_robustness.py` | Tests for rotating-choice slots, damaged settings files, unexpected server errors, the private browser link, folder opening, page security and output filters. |
 | `settings.json` | Created when you save connection settings. Holds your API key if you saved one, so do not share it. |
 | `briefs.json`, `caption_scripts.json` | Saved briefs and saved caption scripts, next to `settings.json`. |
+
+## Changes since 3.9.0
+
+- Rotating fixed choices stay attached to the prompt they were written for. A rejected draft no longer shifts the labels of later prompts, and its choice is requested again so the spread stays even.
+- The browser edition opens through a private link per start and keeps it in a strict session cookie. Without it the page and the API refuse access.
+- **Open folder** opens only the output folder from Settings and folders inside it.
+- The page allows only its own script files.
+- An invalid value in `settings.json` no longer stops the app. The defaults are used and the status line says so until Settings saves valid values.
+- Unexpected server errors reach the page as a message. The desktop app writes the error type and source line to `desktop.log`, never request data.
+- Fewer false rejections: a person named Lora, a cinnamon bun, a hazel-eyed spaniel, an arch that echoes a curve, crackle glaze and a buzzing market street are accepted now. Retries without optional settings happen only for errors about request fields, not for an unknown model.
+- JPEG files with data after their end marker are accepted.
+- LoRA Dataset: each source image is stored once in the local session instead of being rewritten with every change. Existing sessions are moved over automatically.
+- LoRA Dataset: an untouched original with EXIF rotation is exported with its pixels rotated, so training tools that ignore the tag see it upright.
+- **New version** on a History run that used a reference image asks before writing without it. A finished unsaved request no longer reports "Saved to null".
+- Desktop: the final bundle ID is `nl.cyberdelia.scenedirector`. macOS treats this as a new app, so it asks once more for local network access.
 
 ## What changed in 3.9.0
 

@@ -294,9 +294,77 @@
     view.setUint32(12, centralSize, true); view.setUint32(16, offset, true);
     return new Blob([...parts, ...central, end], { type: 'application/zip' });
   }
+  // EXIF orientation (1-8) of a JPEG, PNG or WebP file; 1 when there is none. read(offset, length) returns bytes.
+  // Browsers display the oriented image, but many training tools read the stored pixels and ignore the tag.
+  function tiffOrientation(b) {
+    if (b.length < 8) return 1;
+    const le = b[0] === 0x49 && b[1] === 0x49, be = b[0] === 0x4d && b[1] === 0x4d;
+    if (!le && !be) return 1;
+    const u16 = o => le ? b[o] | b[o + 1] << 8 : b[o] << 8 | b[o + 1];
+    const u32 = o => (le ? b[o] | b[o + 1] << 8 | b[o + 2] << 16 | b[o + 3] << 24 : b[o] << 24 | b[o + 1] << 16 | b[o + 2] << 8 | b[o + 3]) >>> 0;
+    if (u16(2) !== 42) return 1;
+    const ifd = u32(4);
+    if (ifd + 2 > b.length) return 1;
+    for (let i = 0, count = u16(ifd); i < count; i++) {
+      const entry = ifd + 2 + i * 12;
+      if (entry + 12 > b.length) break;
+      if (u16(entry) === 0x0112) { const value = u16(entry + 8); return value >= 1 && value <= 8 ? value : 1; }
+    }
+    return 1;
+  }
+  const ascii = (b, o, n) => String.fromCharCode(...b.subarray(o, o + n));
+  const withoutExifHeader = b => ascii(b, 0, 6) === 'Exif\0\0' ? b.subarray(6) : b;
+  async function exifOrientation(read) {
+    const head = await read(0, 16);
+    if (head[0] === 0xff && head[1] === 0xd8) {
+      for (let offset = 2, steps = 0; steps < 512; steps++) {
+        const marker = await read(offset, 4);
+        if (marker.length < 4 || marker[0] !== 0xff) return 1;
+        if (marker[1] === 0xff) { offset++; continue; }
+        if (marker[1] === 0xd8 || marker[1] === 0x01 || (marker[1] >= 0xd0 && marker[1] <= 0xd7)) { offset += 2; continue; }
+        if (marker[1] === 0xda || marker[1] === 0xd9) return 1;
+        const length = marker[2] << 8 | marker[3];
+        if (length < 2) return 1;
+        if (marker[1] === 0xe1) {
+          const segment = await read(offset + 4, length - 2);
+          if (ascii(segment, 0, 6) === 'Exif\0\0') return tiffOrientation(segment.subarray(6));
+        }
+        offset += 2 + length;
+      }
+      return 1;
+    }
+    if (ascii(head, 1, 3) === 'PNG') {
+      // Only chunks before the image data are read, as browsers do.
+      for (let offset = 8, steps = 0; steps < 4096; steps++) {
+        const chunk = await read(offset, 8);
+        if (chunk.length < 8) return 1;
+        const length = (chunk[0] << 24 | chunk[1] << 16 | chunk[2] << 8 | chunk[3]) >>> 0, type = ascii(chunk, 4, 4);
+        if (type === 'IDAT' || type === 'IEND') return 1;
+        if (type === 'eXIf') return tiffOrientation(withoutExifHeader(await read(offset + 8, length)));
+        offset += 12 + length;
+      }
+      return 1;
+    }
+    if (ascii(head, 0, 4) === 'RIFF' && ascii(head, 8, 4) === 'WEBP') {
+      let offset = 12, extended = false;
+      for (let steps = 0; steps < 256; steps++) {
+        const chunk = await read(offset, 9);
+        if (chunk.length < 8) return 1;
+        const type = ascii(chunk, 0, 4), length = (chunk[4] | chunk[5] << 8 | chunk[6] << 16 | chunk[7] << 24) >>> 0;
+        if (type === 'VP8X') { if (!(chunk[8] & 0x08)) return 1; extended = true; }
+        else if (!extended) return 1;  // a simple WebP has no EXIF
+        if (type === 'EXIF') return tiffOrientation(withoutExifHeader(await read(offset + 8, length)));
+        offset += 8 + length + (length & 1);
+      }
+    }
+    return 1;
+  }
+  function blobReader(blob) {
+    return async (offset, length) => new Uint8Array(await blob.slice(offset, Math.min(blob.size, offset + length)).arrayBuffer());
+  }
   function captionStillCurrent(item, job, config) { return !!item && item.id === job.itemId && item.captionRev === job.revision && editKey(item, config) === job.key; }
   return { clamp, dimensions, cropBox, centerCrop, exportSize, minimumSpec, meetsMinimum, describeMinimum, matchesRatio, growToMinimum,
     constrainCrop, dragCrop, edgeCrop, cropAround, minAlong, exportPlan, exportProblem, sourceProblem, minimumError, editKey, captionStillCurrent,
     safeStem, safeSegment, pairNames, datasetNames, kohyaFolder, metadataJsonl, captionsCsv, captionWarnings, replaceText, renameTrigger, addAffixes,
-    validZipName, captionDocument, crc32, zipStore };
+    validZipName, captionDocument, crc32, zipStore, tiffOrientation, exifOrientation, blobReader };
 });

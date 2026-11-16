@@ -48,7 +48,7 @@
   let samplingDrafts = null, samplingProfile = "creative";
   let promptLibrary = { text: [], vision: [] }, promptLibraryLoaded = false, presetRevision = 0;
   let presets = { lmstudio: { url: "http://localhost:1234/v1" }, ollama: { url: "http://localhost:11434/v1" } };
-  let defaultOutputDir = "";
+  let defaultOutputDir = "", settingsWarning = "";
   const run = { id: null, seq: 0, timer: null, prompts: [], ideas: [], choices: [], file: null, total: 0, notices: [], request: null, view: "live" };
   const single = { busy: false };
   const favorites = new Set();
@@ -402,6 +402,8 @@
   async function api(path, body) {
     const options = body === undefined ? {} : { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) };
     const response = await fetch(path, options);
+    // 403: the service restarted with a new private link, so this page can no longer reach it.
+    if (response.status === 403) throw new Error("This page belongs to an earlier Scene Director session. Open Scene Director again from its launcher.");
     return response.json();
   }
   function setPill(kind, text) {
@@ -586,6 +588,10 @@
       const result = await api("/api/settings", next);
       if (!result.ok) { showTest(result); return null; }
       Object.assign(conn, result.settings, { api_key: "" });  // the server keeps the key from now on
+      if (settingsWarning && !result.settings.settings_warning) {
+        if ($("#status").textContent === settingsWarning) setStatus("Generation settings repaired and saved.");
+        settingsWarning = "";
+      }
       refreshPresets(); loadFavorites();
       if (!run.id && run.prompts.length) renderRun(); else renderBarActions();
       return result.settings;
@@ -827,8 +833,9 @@
       case "done":
         run.file = event.file;
         page.appendChild(el("p", "transition out", "FADE OUT."));
-        page.appendChild(el("p", "saved-line", `Saved to ${event.file}`));
-        setStatus(`Done. ${event.count} prompt${event.count === 1 ? "" : "s"} saved.`);
+        if (event.file) page.appendChild(el("p", "saved-line", `Saved to ${event.file}`));
+        setStatus(event.file ? `Done. ${event.count} prompt${event.count === 1 ? "" : "s"} saved.`
+          : `Done. ${event.count} prompt${event.count === 1 ? "" : "s"} written. Not saved to a file; copy or star what you want to keep.`);
         setProgress(1, 1);
         finish();
         break;
@@ -859,7 +866,7 @@
     }
   }
   function follow(id) {
-    Object.assign(run, { id, seq: 0, prompts: [], ideas: [], choices: [], file: null, total: 0, notices: [], live: null, workflow: brief.workflow, request: null, view: "live" });
+    Object.assign(run, { id, seq: 0, prompts: [], ideas: [], choices: [], file: null, total: 0, notices: [], live: null, workflow: brief.workflow, request: null, view: "live", referenceMissing: false });
     $("#log").textContent = ""; $("#log").hidden = true; $("#logToggle").hidden = true;
     $("#copyAll").disabled = true;
     page.textContent = "";
@@ -1091,6 +1098,8 @@
   }
   async function regenerate(index) {
     if (isBusy()) { setStatus(busyMessage); return; }
+    // History keeps the reference mode and notes, never the image itself.
+    if (run.referenceMissing && !confirm("This run used a reference image. Images are not stored, so the new version is written from the text brief only. Continue?")) return;
     const others = run.prompts.map((text, i) => i === index ? "" : (run.ideas[i] || text.split(/\s+/).slice(0, 30).join(" ")))
       .filter(Boolean).map(note => note.slice(0, 300)).slice(-300);
     const request = window.ScenePromptCore.regenerationRequest(run.request, index, run.choices[index], others);
@@ -1137,7 +1146,8 @@
       historyDialog.close();
       if (briefOnly) { applyRequest(item.request); return; }
       Object.assign(run, { prompts: item.prompts, ideas: item.ideas, choices: item.choices, file: item.file, view: "history", notices: [],
-        workflow: (item.request && item.request.workflow) || "scenes", request: item.request ? requestForRegenerate(item.request) : null });
+        workflow: (item.request && item.request.workflow) || "scenes", request: item.request ? requestForRegenerate(item.request) : null,
+        referenceMissing: !!(item.request && item.request.reference) });
       $("#meta").textContent = `Opened ${file.split(/[\\/]/).pop()}${item.model ? `, written by ${item.model}` : ""}`;
       setProgress(0, 1); setStatus(""); renderRun();
     } catch (e) { $("#historyFolder").textContent = "Scene Director is not running. Start it again."; }
@@ -1146,7 +1156,7 @@
     if (isBusy()) { $("#historyFolder").textContent = busyMessage; return; }
     const result = await loadFavorites();
     historyDialog.close();
-    Object.assign(run, { prompts: result.prompts.slice(), ideas: result.prompts.map(() => ""), choices: [], file: result.file, workflow: "scenes", view: "favorites", request: null });
+    Object.assign(run, { prompts: result.prompts.slice(), ideas: result.prompts.map(() => ""), choices: [], file: result.file, workflow: "scenes", view: "favorites", request: null, referenceMissing: false });
     $("#meta").textContent = "Starred prompts"; setStatus(""); renderRun();
   }
   // Fill the form from a stored request (History) or a saved brief.
@@ -1285,7 +1295,7 @@
     }
   }
   if (location.protocol === "scene-director:") {
-    $("#keyHelp").textContent = "Needed when your server requires authentication, such as an LM Studio API token. Save stores it in this app's private settings folder on this Mac. It is never shown in this page again.";
+    $("#keyHelp").textContent = "Needed when your server requires authentication, such as an LM Studio API token. Save stores it in this app's private settings folder on this computer. It is never shown in this page again.";
   }
   async function boot() {
     loadBrief();
@@ -1299,6 +1309,8 @@
       defaultOutputDir = state.default_output_dir || "";
       Object.assign(conn, state.settings || {});
       if (!conn.output_dir) conn.output_dir = defaultOutputDir;
+      settingsWarning = (state.settings && state.settings.settings_warning) || "";
+      if (settingsWarning) setStatus(settingsWarning);
       await refreshPresets();
       checkConnection(); loadFavorites(); loadBriefs(); renderBarActions();
       if (state.job && !state.job.finished && state.job.workflow !== "dataset_caption") follow(state.job.id);

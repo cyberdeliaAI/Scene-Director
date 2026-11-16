@@ -67,34 +67,64 @@
   $('dsCaptionTab').addEventListener('click', () => stage('caption'));
   $('dsContinue').addEventListener('click', () => stage('caption'));
 
-  // Session snapshots include source files, crop edits and manual captions, on this origin only.
-  let saveTimer, saveChain = Promise.resolve(), storageRevision = 0;
+  // Session storage, on this origin only. Each source image is its own record in "files" and is written once;
+  // the "session" record holds crops, captions and settings and is rewritten on every change.
+  let saveTimer, saveChain = Promise.resolve(), storageRevision = 0, storedFiles = new Set();
   async function openDB() {
     return new Promise((resolve, reject) => {
-      const request = indexedDB.open('scene-director-lora-dataset', 1);
-      request.onupgradeneeded = () => request.result.createObjectStore('session');
-      request.onsuccess = () => resolve(request.result); request.onerror = () => reject(request.error);
+      const request = indexedDB.open('scene-director-lora-dataset', 2);
+      request.onupgradeneeded = event => {
+        const db = request.result, tx = request.transaction;
+        if (!db.objectStoreNames.contains('session')) db.createObjectStore('session');
+        if (!db.objectStoreNames.contains('files')) db.createObjectStore('files');
+        if (event.oldVersion !== 1) return;
+        // Version 1 kept every image inside the session record. Move each one to its own record once.
+        const sessions = tx.objectStore('session'), files = tx.objectStore('files'), get = sessions.get('current');
+        get.onsuccess = () => {
+          const saved = get.result;
+          if (!saved || !Array.isArray(saved.items)) return;
+          for (const item of saved.items) {
+            if (item && typeof item.id === 'string' && item.file instanceof Blob) files.put(item.file, item.id);
+            if (item) delete item.file;
+          }
+          sessions.put(saved, 'current');
+        };
+      };
+      request.onsuccess = () => {
+        const db = request.result;
+        // Another window needs a newer storage version: let it proceed and ask for a reload here.
+        db.onversionchange = () => { db.close(); state.db = null; $('dsStorage').textContent = 'Dataset storage was updated in another window. Reload this page to keep saving.'; };
+        resolve(db);
+      };
+      request.onerror = () => reject(request.error);
     });
   }
   function transaction(mode, action) {
     return new Promise((resolve, reject) => {
-      const tx = state.db.transaction('session', mode), store = tx.objectStore('session');
-      const request = action(store); let result;
-      if (request) request.onsuccess = () => { result = request.result; };
-      tx.oncomplete = () => resolve(result); tx.onerror = tx.onabort = () => reject(tx.error || new Error('Session storage failed.'));
+      const tx = state.db.transaction(['session', 'files'], mode);
+      action(tx);
+      tx.oncomplete = () => resolve(); tx.onerror = tx.onabort = () => reject(tx.error || new Error('Session storage failed.'));
     });
   }
   function saveNow() {
     clearTimeout(saveTimer); if (!state.db) return Promise.resolve();
     const revision = ++storageRevision;
+    const files = new Map(state.items.map(item => [item.id, item.file]));
     const snapshot = { config:clone(state.config), index:state.index, stage:state.stage, job:state.job ? clone(state.job) : null,
-      items:state.items.map(item => ({ id:item.id, name:item.name, file:item.file, width:item.width, height:item.height,
+      items:state.items.map(item => ({ id:item.id, name:item.name, width:item.width, height:item.height,
         edit:clone(item.edit), undo:clone(item.undo), aspect:item.aspect, caption:item.caption, captionKey:item.captionKey, captionRev:item.captionRev,
         approved:!!item.approved, captionError:item.captionError || '', autoCrop:item.autoCrop !== false, imported:!!item.imported, pendingImport:!!item.pendingImport })) };
     $('dsStorage').textContent = 'Saving this dataset session locally…';
     saveChain = saveChain.catch(() => {}).then(async () => {
-      if (revision !== storageRevision) return;
-      await transaction('readwrite', store => store.put(snapshot, 'current'));
+      if (revision !== storageRevision || !state.db) return;
+      const added = [...files.keys()].filter(id => !storedFiles.has(id)), removed = [...storedFiles].filter(id => !files.has(id));
+      await transaction('readwrite', tx => {
+        const store = tx.objectStore('files');
+        for (const id of added) store.put(files.get(id), id);
+        for (const id of removed) store.delete(id);
+        tx.objectStore('session').put(snapshot, 'current');
+      });
+      added.forEach(id => storedFiles.add(id)); removed.forEach(id => storedFiles.delete(id));
       if (revision === storageRevision) $('dsStorage').textContent = 'Dataset session saved on this computer. Originals are unchanged.';
     }).catch(() => { $('dsStorage').textContent = 'Session could not be saved locally. Export your work before closing the app.'; });
     return saveChain;
@@ -102,11 +132,27 @@
   function persist() { clearTimeout(saveTimer); saveTimer = setTimeout(saveNow, 350); }
   async function restore() {
     try {
-      state.db = await openDB(); const saved = await transaction('readonly', store => store.get('current'));
+      state.db = await openDB();
+      let saved = null, keys = [];
+      const files = new Map();
+      await transaction('readonly', tx => {
+        const store = tx.objectStore('files'), listing = store.getAllKeys(), get = tx.objectStore('session').get('current');
+        listing.onsuccess = () => { keys = listing.result; };
+        get.onsuccess = () => {
+          saved = get.result;
+          for (const item of saved && Array.isArray(saved.items) ? saved.items.slice(0, 1000) : []) {
+            if (!item || typeof item.id !== 'string') continue;
+            const read = store.get(item.id);
+            read.onsuccess = () => { if (read.result instanceof Blob) files.set(item.id, read.result); };
+          }
+        };
+      });
+      // Records without a session entry are removed by the next save.
+      storedFiles = new Set(keys.filter(key => typeof key === 'string'));
       if (saved && Array.isArray(saved.items)) {
         Object.assign(state.config, saved.config || {});
-        state.items = saved.items.filter(item => item.file instanceof Blob && typeof item.caption === 'string').slice(0,1000)
-          .map(item => ({ ...item, url:URL.createObjectURL(item.file), undo:item.undo || [], captionRev:Number(item.captionRev) || 0 }));
+        state.items = saved.items.slice(0,1000).filter(item => item && files.has(item.id) && typeof item.caption === 'string')
+          .map(item => ({ ...item, file:files.get(item.id), url:URL.createObjectURL(files.get(item.id)), undo:item.undo || [], captionRev:Number(item.captionRev) || 0 }));
         state.stage = saved.stage === 'caption' ? 'caption' : 'prepare';
         state.index = state.items.length ? C.clamp(Number(saved.index) || 0,0,state.items.length-1) : -1;
         state.job = null;
@@ -550,7 +596,9 @@
     const issue=C.exportProblem(box,plan,C.minimumSpec(config));if(issue)throw Object.assign(new Error(`${item.name}: ${issue}`),{sizeProblem:true});
     const sourceExt=/\.webp$/i.test(item.name)?'webp':/\.jpe?g$/i.test(item.name)?'jpg':'png';
     const ext=vision?'jpg':config.format==='original'?sourceExt:config.format;
-    if(!vision&&config.format==='original'&&!item.edit.rotation&&!item.edit.flipH&&!item.edit.flipV&&plan.crop.x===0&&plan.crop.y===0&&plan.crop.w===image.width&&plan.crop.h===image.height&&size.width===item.width&&size.height===item.height)return{blob:item.file,ext};
+    // An untouched original is exported as it is, unless EXIF orientation would make trainers read it rotated.
+    if(!vision&&config.format==='original'&&!item.edit.rotation&&!item.edit.flipH&&!item.edit.flipV&&plan.crop.x===0&&plan.crop.y===0&&plan.crop.w===image.width&&plan.crop.h===image.height&&size.width===item.width&&size.height===item.height
+      &&await C.exifOrientation(C.blobReader(item.file))===1)return{blob:item.file,ext};
     const output=document.createElement('canvas'),dimensions=vision?C.exportSize({w:size.width,h:size.height},1536):size;
     output.width=dimensions.width;output.height=dimensions.height;const ctx=output.getContext('2d');
     if(ext==='jpg'){ctx.fillStyle='#fff';ctx.fillRect(0,0,output.width,output.height);}ctx.imageSmoothingQuality='high';const source=plan.crop;ctx.drawImage(image,source.x,source.y,source.w,source.h,0,0,output.width,output.height);
