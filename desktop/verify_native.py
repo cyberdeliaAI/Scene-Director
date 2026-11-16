@@ -18,7 +18,7 @@ import zipfile
 ROOT = Path(__file__).resolve().parent.parent
 TARGETS = ('macos-arm64', 'macos-x64', 'windows-x64', 'linux-x64')
 ASSETS = ('index.html','app.js','app.css','prompt-core.js','dataset-core.js','dataset.js','dataset.css','app-icon.png')
-LICENSES = ('Electron-LICENSE.txt','LICENSES.chromium.html','Python-LICENSE.txt','PyInstaller-COPYING.txt','certifi-LICENSE.txt')
+LICENSES = ('Scene-Director-LICENSE.txt','Electron-LICENSE.txt','LICENSES.chromium.html','Python-LICENSE.txt','PyInstaller-COPYING.txt','certifi-LICENSE.txt')
 
 
 def plain_environment():
@@ -78,6 +78,8 @@ def verify_bundle(app, target, version):
     for name in LICENSES:
         if not (resources/'licenses'/name).is_file():
             raise RuntimeError('Missing bundled license: '+name)
+    if (resources/'licenses/Scene-Director-LICENSE.txt').read_bytes() != (ROOT/'LICENSE').read_bytes():
+        raise RuntimeError('The bundled project license differs from the release source.')
     if not (resources/'app.asar').is_file():
         raise RuntimeError('The desktop shell is missing.')
     signing = {}

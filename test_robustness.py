@@ -11,6 +11,7 @@ import threading
 import unittest
 import urllib.error
 import urllib.request
+import warnings
 from pathlib import Path
 from unittest import mock
 
@@ -162,13 +163,17 @@ class UnexpectedErrorTests(unittest.TestCase):
             with urllib.request.urlopen(request, timeout=10) as response:
                 return response.status, json.loads(response.read())
         except urllib.error.HTTPError as exc:
-            return exc.code, json.loads(exc.read())
+            with exc:
+                return exc.code, json.loads(exc.read())
 
     def test_get_and_post_answer_with_json_and_log_only_type_and_place(self):
         stderr = io.StringIO()
-        with contextlib.redirect_stderr(stderr), \
+        with warnings.catch_warnings(), contextlib.redirect_stderr(stderr), \
                 mock.patch.object(self.app, "history", side_effect=KeyError("sk-secret-in-message")), \
                 mock.patch.object(self.app, "favorite", side_effect=ValueError("bad value")):
+            # Other completed tests may release file objects during this short stderr capture.
+            # Keep the exact diagnostic/privacy assertions independent of Python cleanup warnings.
+            warnings.simplefilter("ignore", ResourceWarning)
             get_status, get_body = self.call("/api/history")
             post_status, post_body = self.call("/api/favorite", {"prompt": "x"})
             state_status, _ = self.call("/api/state")

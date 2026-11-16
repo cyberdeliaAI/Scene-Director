@@ -33,6 +33,7 @@ async function main() {
     if (!fs.existsSync(source)) throw new Error('Missing bundled license: '+name);
     fs.copyFileSync(source, path.join(build, 'licenses', name));
   }
+  fs.copyFileSync(path.join(root, 'LICENSE'), path.join(build, 'licenses', 'Scene-Director-LICENSE.txt'));
   for (const name of ['LICENSE', 'LICENSES.chromium.html']) {
     const source = path.join(__dirname, 'node_modules/electron/dist', name);
     if (!fs.existsSync(source)) throw new Error('Install the pinned Electron binary before building.');
