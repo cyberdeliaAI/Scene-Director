@@ -13,7 +13,7 @@ Scene Director asks a local language model to invent the scenes for you. You set
 
 Version 3.9.1. Python 3.9 or newer. No packages to install.
 
-Standalone desktop downloads are available for **macOS Apple Silicon**, **macOS Intel**, **Windows x64** and **Linux x64**. [Download Scene Director 3.9.0](https://github.com/cyberdeliaAI/Scene-Director/releases/tag/v3.9.0). Python is included; no Python or Node.js installation is required. Both Mac apps are Developer ID signed and Apple-notarized. Windows and Linux downloads are portable archives. See [desktop/README.md](desktop/README.md) for installation, system requirements and build instructions. The browser launchers remain available.
+Standalone desktop downloads are available for **macOS Apple Silicon**, **macOS Intel**, **Windows x64** and **Linux x64**. [Download Scene Director 3.9.1](https://github.com/cyberdeliaAI/Scene-Director/releases/tag/v3.9.1). Python is included; no Python or Node.js installation is required. Both Mac apps are Developer ID signed and Apple-notarized. Windows and Linux downloads are portable archives. See [desktop/README.md](desktop/README.md) for installation, system requirements and build instructions. The browser launchers remain available.
 
 On macOS, Homebrew selects the matching Intel or Apple Silicon download:
 

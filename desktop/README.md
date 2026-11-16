@@ -1,17 +1,17 @@
 # Scene Director desktop
 
-Version **3.9.0**. The same English Prompt Studio and LoRA Dataset interface in its own desktop window, with a bundled Python service. Image changes produce revised prompts or edit instructions; the app does not generate image files or train LoRAs.
+Version **3.9.1**. The same English Prompt Studio and LoRA Dataset interface in its own desktop window, with a bundled Python service. Image changes produce revised prompts or edit instructions; the app does not generate image files or train LoRAs.
 
 ## Downloads and installation
 
-[Download the current release](https://github.com/cyberdeliaAI/Scene-Director/releases/tag/v3.9.0). Every archive has a SHA-256 file and a `.verification.json` report identifying the source revision and checks performed on the original and extracted app. `SHA256SUMS` covers all four downloads.
+[Download the current release](https://github.com/cyberdeliaAI/Scene-Director/releases/tag/v3.9.1). Every archive has a SHA-256 file and a `.verification.json` report identifying the source revision and checks performed on the original and extracted app. `SHA256SUMS` covers all four downloads.
 
 | Platform | Download | Installation |
 | --- | --- | --- |
-| Apple Silicon, macOS 13+ | `scene-director-3.9.0-macos-arm64.zip` | Extract and move **Scene Director.app** to Applications. |
-| Intel, macOS 13+ | `scene-director-3.9.0-macos-x64.zip` | Extract and move **Scene Director.app** to Applications. |
-| Windows x64 | `scene-director-3.9.0-windows-x64.zip` | Extract the whole ZIP into a folder, then open **Scene Director.exe**. Keep its resources beside it. |
-| Linux x64 | `scene-director-3.9.0-linux-x64.tar.gz` | Extract the archive, open the **Scene Director** folder and run `./scene-director`. |
+| Apple Silicon, macOS 13+ | `scene-director-3.9.1-macos-arm64.zip` | Extract and move **Scene Director.app** to Applications. |
+| Intel, macOS 13+ | `scene-director-3.9.1-macos-x64.zip` | Extract and move **Scene Director.app** to Applications. |
+| Windows x64 | `scene-director-3.9.1-windows-x64.zip` | Extract the whole ZIP into a folder, then open **Scene Director.exe**. Keep its resources beside it. |
+| Linux x64 | `scene-director-3.9.1-linux-x64.tar.gz` | Extract the archive, open the **Scene Director** folder and run `./scene-director`. |
 
 The Mac downloads are Developer ID signed and Apple-notarized, with stapled tickets and Gatekeeper verification. Windows and Linux downloads are not code-signed. Linux is built on Ubuntu 22.04 and needs a desktop environment with GTK 3, NSS, GBM and ALSA libraries; other distributions are not separately tested. The release checks use macOS 15, Windows Server 2022 and Ubuntu 22.04 runners; older supported Mac versions are not separately tested.
 
@@ -75,7 +75,7 @@ node desktop/node_modules/electron/install.js
 npm run build:native --prefix desktop
 ```
 
-On Windows use `python` and `desktop/.venv/Scripts/python` instead. Unsigned local builds go into `desktop/dist/3.9.0/`. Local Mac builds have an ad-hoc signature; release Mac builds use the required Developer ID and notarization recipe in [code-signing.md](code-signing.md). `build:mac` remains a compatibility alias.
+On Windows use `python` and `desktop/.venv/Scripts/python` instead. Unsigned local builds go into `desktop/dist/3.9.1/`. Local Mac builds have an ad-hoc signature; release Mac builds use the required Developer ID and notarization recipe in [code-signing.md](code-signing.md). `build:mac` remains a compatibility alias.
 
 `npm start --prefix desktop` uses the isolated venv; built apps always use their bundled backend. `SCENE_DIRECTOR_DESKTOP_DATA_DIR` and `SCENE_DIRECTOR_DESKTOP_OUTPUT_DIR` select disposable test locations. The custom PNG, macOS ICNS and Windows ICO are in `assets/` and use the same artwork.
 
