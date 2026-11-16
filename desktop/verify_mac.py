@@ -33,6 +33,8 @@ def verify_app(app, team, version, arch='arm64'):
     info = plistlib.loads((app/'Contents/Info.plist').read_bytes())
     if info.get('CFBundleShortVersionString') != version:
         raise RuntimeError('The app version does not match the test release.')
+    if info.get('CFBundleIdentifier') != 'nl.cyberdelia.scenedirector':
+        raise RuntimeError('The app does not have the final Scene Director bundle identifier.')
     if any(key.startswith('SCENE_DIRECTOR_') for key in info.get('LSEnvironment', {})):
         raise RuntimeError('Disposable test settings must not be embedded in the app.')
     executable = app/'Contents/MacOS'/info['CFBundleExecutable']
@@ -71,7 +73,7 @@ def verify_app(app, team, version, arch='arm64'):
     roots = list(backend.rglob('certificates/cacert.pem'))
     if len(roots) != 1 or not ssl.create_default_context(cafile=str(roots[0])).get_ca_certs():
         raise RuntimeError('The bundled backend has no portable HTTPS roots.')
-    for name in ('Electron-LICENSE.txt','LICENSES.chromium.html','Python-LICENSE.txt','PyInstaller-COPYING.txt','certifi-LICENSE.txt'):
+    for name in ('Scene-Director-LICENSE.txt','Electron-LICENSE.txt','LICENSES.chromium.html','Python-LICENSE.txt','PyInstaller-COPYING.txt','certifi-LICENSE.txt'):
         if not (app/'Contents/Resources/licenses'/name).is_file():
             raise RuntimeError('Missing bundled license: '+name)
     run('xcrun', 'stapler', 'validate', str(app), capture_output=True)

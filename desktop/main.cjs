@@ -3,6 +3,7 @@
 const { app, BrowserWindow, dialog, ipcMain, Menu, net, protocol, session } = require('electron');
 const { createPresetFolderPicker } = require('./folder-picker.cjs');
 const { allowDatasetDownload } = require('./dataset-download.cjs');
+const { describeDiagnostic } = require('./diagnostic.cjs');
 const { spawn } = require('node:child_process');
 const { randomBytes } = require('node:crypto');
 const fs = require('node:fs');
@@ -57,8 +58,9 @@ function startBackend() {
         }
       } catch { report('Unexpected local service output.'); }
     });
-    // Never log request bodies, uploaded images, or API keys.
-    backend.stderr.on('data', () => report('The local service reported a diagnostic on stderr.'));
+    // Never log request bodies, uploaded images, or API keys. Only the service's own
+    // diagnostic lines (an error type and a source line) are copied as text.
+    readline.createInterface({ input: backend.stderr }).on('line', line => report(describeDiagnostic(line)));
     backend.once('error', error => { clearTimeout(timer); reject(error); });
     backend.once('exit', (code, signal) => {
       clearTimeout(timer);

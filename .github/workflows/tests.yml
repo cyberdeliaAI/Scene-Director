@@ -11,10 +11,18 @@ permissions:
 
 jobs:
   source:
+    name: Python ${{ matrix.python }} · ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
         os: [ubuntu-22.04, windows-2022, macos-15]
+        python: ['3.13']
+        include:
+          # The oldest supported Python, where the request transport depends most on http.client internals.
+          - os: ubuntu-22.04
+            python: '3.9'
+          - os: windows-2022
+            python: '3.9'
     runs-on: ${{ matrix.os }}
     timeout-minutes: 15
     steps:
@@ -23,7 +31,7 @@ jobs:
           persist-credentials: false
       - uses: actions/setup-python@v5
         with:
-          python-version: '3.13'
+          python-version: ${{ matrix.python }}
       - uses: actions/setup-node@v4
         with:
           node-version: '24'

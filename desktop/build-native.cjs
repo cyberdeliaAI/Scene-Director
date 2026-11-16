@@ -16,7 +16,7 @@ async function main() {
   const stage = path.join(build, 'electron-source');
   fs.mkdirSync(stage, { recursive: true });
   fs.copyFileSync(path.join(root, 'web/app-icon.png'), path.join(stage, 'app-icon.png'));
-  for (const file of ['main.cjs', 'preload.cjs', 'folder-picker.cjs', 'dataset-download.cjs', 'package.json']) fs.copyFileSync(path.join(__dirname, file), path.join(stage, file));
+  for (const file of ['main.cjs', 'preload.cjs', 'folder-picker.cjs', 'dataset-download.cjs', 'diagnostic.cjs', 'package.json']) fs.copyFileSync(path.join(__dirname, file), path.join(stage, file));
   fs.mkdirSync(path.join(build, 'spec'), { recursive: true });
   execFileSync(python, [
     '-m', 'PyInstaller', '--noconfirm', '--clean', '--onedir', ...(process.platform === 'darwin' ? ['--target-architecture', process.arch === 'x64' ? 'x86_64' : 'arm64'] : []),
@@ -33,6 +33,7 @@ async function main() {
     if (!fs.existsSync(source)) throw new Error('Missing bundled license: '+name);
     fs.copyFileSync(source, path.join(build, 'licenses', name));
   }
+  fs.copyFileSync(path.join(root, 'LICENSE'), path.join(build, 'licenses', 'Scene-Director-LICENSE.txt'));
   for (const name of ['LICENSE', 'LICENSES.chromium.html']) {
     const source = path.join(__dirname, 'node_modules/electron/dist', name);
     if (!fs.existsSync(source)) throw new Error('Install the pinned Electron binary before building.');
@@ -45,7 +46,7 @@ async function main() {
     icon: path.join(__dirname, 'assets', process.platform === 'win32' ? 'SceneDirector.ico' : process.platform === 'darwin' ? 'SceneDirector.icns' : 'SceneDirector.png'),
     electronVersion: require('./package.json').devDependencies.electron,
     out: path.join(__dirname, 'dist', version), overwrite: true, asar: true,
-    appBundleId: 'com.scenedirector.desktop.test', appVersion: version, buildVersion: version.split('-')[0],
+    appBundleId: 'nl.cyberdelia.scenedirector', appVersion: version, buildVersion: version.split('-')[0],
     appCopyright: 'Scene Director',
     extendInfo: { LSMinimumSystemVersion: '13.0', NSHighResolutionCapable: true,
       NSHumanReadableCopyright: 'Scene Director',

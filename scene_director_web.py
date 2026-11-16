@@ -12,16 +12,19 @@ import hmac
 import os
 import random
 import re
+import secrets
 import subprocess
 import sys
 import threading
 import time
+import traceback
 import unicodedata
 import urllib.error
 import urllib.request
 import uuid
 import webbrowser
 from datetime import datetime
+from http.cookies import CookieError, SimpleCookie
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from socketserver import TCPServer
@@ -47,6 +50,29 @@ PROMPT_INPUTS = ("text", "prompt", "positive", "text_g", "text_l", "string", "va
 WORKFLOW_LABELS = {"change_image": "Change an image", "rewrite": "Rewrite a prompt", "edit_prompt": "Edit a prompt"}
 COMFY_DEFAULTS = {"comfy_url": "http://127.0.0.1:8188", "comfy_workflow": "", "comfy_node": "",
                   "comfy_input": "text", "comfy_seed": "random"}
+SAMPLING_PROFILES = (("sampling", "Generate scenes", engine.SAMPLING_DEFAULTS),
+                     ("sampling_precise", "Image changes, rewrites, edits and captions", engine.PRECISE_DEFAULTS))
+DIAGNOSTIC_PREFIX = "Scene Director diagnostic: "
+SESSION_PAGE = """<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8"><title>Scene Director</title></head>
+<body style="font-family: system-ui, sans-serif; max-width: 34rem; margin: 4rem auto; line-height: 1.5">
+<h1>Open Scene Director from its window</h1>
+<p>This address needs the private link that Scene Director prints when it starts. Use the launcher again,
+or copy the full address from the Scene Director terminal window. A new link is made every time it starts.</p>
+</body></html>
+"""
+
+
+def report_unexpected(exc):
+    """Write one stderr line with the error type and source line, never request data.
+
+    The desktop app copies exactly this line format into desktop.log.
+    """
+    frames = traceback.extract_tb(exc.__traceback__) if exc.__traceback__ else []
+    own = [frame for frame in frames if Path(frame.filename).name.startswith("scene_director")]
+    frame = (own or frames)[-1] if frames else None
+    where = f"{Path(frame.filename).name}:{frame.lineno}" if frame else "unknown"
+    print(f"{DIAGNOSTIC_PREFIX}{exc.__class__.__name__} at {where}", file=sys.stderr, flush=True)
 
 
 class LoopbackHTTPServer(ThreadingHTTPServer):
@@ -132,8 +158,18 @@ class App:
         values["has_api_key"] = bool(saved.get("api_key"))
         for key, default in COMFY_DEFAULTS.items():
             values.setdefault(key, default)
-        values["sampling"] = engine.validate_sampling(saved.get("sampling"))
-        values["sampling_precise"] = engine.validate_sampling(saved.get("sampling_precise"), defaults=engine.PRECISE_DEFAULTS)
+        # A hand-edited or older settings file must never stop the app. Invalid
+        # values fall back to the defaults until Settings saves valid ones.
+        problems = []
+        for key, label, defaults in SAMPLING_PROFILES:
+            try:
+                values[key] = engine.validate_sampling(saved.get(key), defaults=defaults)
+            except engine.GenerationError as exc:
+                values[key] = engine.validate_sampling(defaults=defaults)
+                problems.append(f"{label}: {exc}")
+        if problems:
+            values["settings_warning"] = ("Saved generation settings were invalid, so the defaults are used. "
+                                          "Open Settings and press Save to fix them. " + " ".join(problems))
         return values
 
     def save_settings(self, data):
@@ -688,11 +724,18 @@ class App:
             queued.append(result.get("prompt_id") if isinstance(result, dict) else None)
         return {"ok": True, "queued": len(queued), "ids": queued}
 
-    @staticmethod
-    def open_folder(path_text):
-        path = Path(str(path_text or "")).expanduser()
+    def open_folder(self, path_text):
+        """Open the prompt output folder, or a folder inside it, in the file manager. Nothing else."""
+        try:
+            path = Path(str(path_text or "")).expanduser().resolve()
+            roots = {self._output_root(), Path(self.defaults.get("output_dir") or engine.OUTPUT_DIR).expanduser().resolve()}
+        except (OSError, RuntimeError, ValueError):
+            raise engine.GenerationError("Enter a valid folder path.") from None
         if path.is_file():
             path = path.parent
+        if not any(path == root or root in path.parents for root in roots):
+            raise engine.GenerationError("Only the output folder from Settings can be opened here. "
+                                         "Save the settings first to open a new output folder.")
         if not path.is_dir():
             raise engine.GenerationError("That folder does not exist yet. It is created when the first prompts are saved.")
         if sys.platform == "darwin":
@@ -703,7 +746,7 @@ class App:
             subprocess.Popen(["xdg-open", str(path)])
 
 
-def make_handler(app, port_holder, auth_token=None):
+def make_handler(app, port_holder, auth_token=None, session_token=None):
     class Handler(BaseHTTPRequestHandler):
         server_version = f"SceneDirector/{engine.VERSION}"
 
@@ -719,9 +762,49 @@ def make_handler(app, port_holder, auth_token=None):
             return host in (f"127.0.0.1:{port}", f"localhost:{port}", f"[::1]:{port}")
 
         def _authorized(self):
-            return auth_token is None or hmac.compare_digest(
-                (self.headers.get("X-Scene-Director-Token") or "").encode("utf-8"),
-                auth_token.encode("utf-8"))
+            if auth_token is not None and not hmac.compare_digest(
+                    (self.headers.get("X-Scene-Director-Token") or "").encode("utf-8"),
+                    auth_token.encode("utf-8")):
+                return False
+            return session_token is None or hmac.compare_digest(
+                self._session_cookie().encode("utf-8"), session_token.encode("utf-8"))
+
+        def _cookie_name(self):
+            # Cookies are shared by all ports of one host, so each port gets its own name.
+            return f"scene_director_{port_holder['port']}"
+
+        def _session_cookie(self):
+            try:
+                morsel = SimpleCookie(self.headers.get("Cookie") or "").get(self._cookie_name())
+            except CookieError:
+                return ""
+            return morsel.value if morsel else ""
+
+        def _start_session(self, url):
+            """Exchange the private link for a cookie, so the token leaves the address bar."""
+            if session_token is None or url.path not in ("/", "/index.html"):
+                return False
+            offered = parse_qs(url.query).get("token", [""])[0]
+            if not offered:
+                return False
+            if not hmac.compare_digest(offered.encode("utf-8"), session_token.encode("utf-8")):
+                self._send(403, SESSION_PAGE.encode("utf-8"), "text/html; charset=utf-8")
+                return True
+            self.send_response(303)
+            self.send_header("Location", "/")
+            self.send_header("Set-Cookie", f"{self._cookie_name()}={session_token}; Path=/; HttpOnly; SameSite=Strict")
+            self.send_header("Cache-Control", "no-store")
+            self.send_header("Referrer-Policy", "no-referrer")
+            self.send_header("Content-Length", "0")
+            self.end_headers()
+            return True
+
+        def _refuse(self, url):
+            if session_token is not None and url.path in ("/", "/index.html"):
+                return self._send(403, SESSION_PAGE.encode("utf-8"), "text/html; charset=utf-8")
+            message = ("This page belongs to another Scene Director session. Open Scene Director again from its launcher."
+                       if session_token is not None else "Desktop session required.")
+            return self._send(403, {"ok": False, "error": message})
 
         def _send(self, status, body, content_type="application/json; charset=utf-8"):
             data = body if isinstance(body, bytes) else json.dumps(body).encode("utf-8")
@@ -733,7 +816,7 @@ def make_handler(app, port_holder, auth_token=None):
             self.send_header("Referrer-Policy", "no-referrer")
             if content_type.startswith("text/html"):
                 self.send_header("Content-Security-Policy",
-                                 "default-src 'self'; script-src 'self' 'unsafe-inline'; "
+                                 "default-src 'self'; script-src 'self'; "
                                  "style-src 'self' 'unsafe-inline'; "
                                  "font-src 'self'; img-src 'self' data: blob:; "
                                  "connect-src 'self'; frame-ancestors 'none'")
@@ -755,11 +838,32 @@ def make_handler(app, port_holder, auth_token=None):
         # Routes ----------------------------------------------------------------
 
         def do_GET(self):
+            self._guarded(self._get)
+
+        def do_POST(self):
+            self._guarded(self._post)
+
+        def _guarded(self, handler):
+            try:
+                handler()
+            except (BrokenPipeError, ConnectionResetError):
+                pass  # the page went away; nobody is waiting for an answer
+            except Exception as exc:  # noqa: BLE001 - last line of defense for the local service
+                report_unexpected(exc)
+                message = f"Unexpected error ({exc.__class__.__name__}: {str(exc)[:300]}). Details are in the app log."
+                try:
+                    self._send(500, {"ok": False, "error": message})
+                except OSError:
+                    pass
+
+        def _get(self):
             if not self._host_ok():
                 return self._send(403, {"ok": False, "error": "Forbidden host."})
-            if not self._authorized():
-                return self._send(403, {"ok": False, "error": "Desktop session required."})
             url = urlparse(self.path)
+            if self._start_session(url):
+                return None
+            if not self._authorized():
+                return self._refuse(url)
             if url.path in ("/", "/index.html"):
                 try:
                     return self._send(200, PAGE.read_bytes(), "text/html; charset=utf-8")
@@ -815,11 +919,11 @@ def make_handler(app, port_holder, auth_token=None):
                 return self._send(200, {"ok": True, "events": events, "finished": finished})
             return self._send(404, {"ok": False, "error": "Not found."})
 
-        def do_POST(self):
+        def _post(self):
             if not self._host_ok():
                 return self._send(403, {"ok": False, "error": "Forbidden host."})
             if not self._authorized():
-                return self._send(403, {"ok": False, "error": "Desktop session required."})
+                return self._refuse(urlparse(self.path))
             path = urlparse(self.path).path
             data = self._body(DATASET_MAX_BODY if path == "/api/dataset/write" else MAX_BODY)
             if data is None:
@@ -854,7 +958,7 @@ def make_handler(app, port_holder, auth_token=None):
 
 
 def create_server(port=None, api_url=None, model=None, output_dir=None, settings_file=SETTINGS_FILE,
-                  auth_token=None, worker_command=None):
+                  auth_token=None, worker_command=None, session_token=None):
     defaults = {
         "server": "lmstudio" if (api_url or engine.API_URL) == engine.DEFAULT_API_URL else "custom",
         "api_url": api_url or engine.API_URL,
@@ -866,7 +970,7 @@ def create_server(port=None, api_url=None, model=None, output_dir=None, settings
     }
     app = App(defaults, settings_file, worker_command)
     holder = {"port": 0}
-    handler = make_handler(app, holder, auth_token)
+    handler = make_handler(app, holder, auth_token, session_token)
     candidates = [port] if port is not None else list(range(DEFAULT_PORT, DEFAULT_PORT + 20))
     last_error = None
     for candidate in candidates:
@@ -884,11 +988,13 @@ def create_server(port=None, api_url=None, model=None, output_dir=None, settings
 
 def launch(port=None, open_browser=True, api_url=None, model=None, output_dir=None):
     try:
-        server, app = create_server(port, api_url, model, output_dir)
+        # A private link per start keeps other programs and users on this computer out of the API.
+        token = secrets.token_urlsafe(32)
+        server, app = create_server(port, api_url, model, output_dir, session_token=token)
     except OSError as exc:
         print(f"Error: {exc}", file=sys.stderr)
         return 1
-    url = f"http://127.0.0.1:{server.server_address[1]}/"
+    url = f"http://127.0.0.1:{server.server_address[1]}/?token={token}"
     print(f"{engine.APP_NAME} {engine.VERSION} is running at {url}")
     print("Keep this window open while you use it. Press Ctrl+C to quit.")
     if open_browser:

@@ -39,7 +39,7 @@ Closing the app stops its owned local service and active generation. Finished pr
 - Settings and saved API key: macOS `~/Library/Application Support/Scene Director/settings.json`; Windows `%APPDATA%/Scene Director/settings.json`; Linux `~/.config/Scene Director/settings.json` (or `$XDG_CONFIG_HOME/Scene Director`).
 - Interface choices: in the app's own local browser storage, under the same platform-specific app profile.
 - Default prompts folder: `Documents/Scene Director/prompts` in your home folder. Change it in Settings.
-- Startup diagnostic log: `desktop.log` in that app profile. It records service lifecycle messages, not uploaded images, prompts or API keys.
+- Startup diagnostic log: `desktop.log` in that app profile. It records service lifecycle messages and, for unexpected errors, the error type and source line. It never records uploaded images, prompts or API keys.
 
 These folders are outside the app bundle, so replacing the app does not replace your data. The desktop app uses separate settings from the browser edition. Existing browser-edition prompt files and settings are not moved. Enter the same server/model/output folder in desktop Settings if you want to use that setup.
 
