@@ -7,11 +7,11 @@
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-2e7d4f" alt="MIT license"></a>
 </p>
 
-Give a direction. Get distinct, surprising image prompts for **Krea 2** and **Z-Image Turbo**.
+Give a direction. Get distinct, surprising image prompts for **Krea 2**, **Z-Image Turbo** and **Anima**.
 
 Scene Director asks a local language model to invent the scenes for you. You set a subject and a direction like `jobs` or `sport`. The model picks different moments, places, clothing, framing and light for every prompt, within the limits you set. Prompts are always English, even when your brief is Dutch.
 
-Version 3.9.1. Python 3.9 or newer. No packages to install.
+Version 3.10.0. Python 3.9 or newer. No packages to install.
 
 Standalone desktop downloads are available for **macOS Apple Silicon**, **macOS Intel**, **Windows x64** and **Linux x64**. [Download Scene Director 3.9.1](https://github.com/cyberdeliaAI/Scene-Director/releases/tag/v3.9.1). Python is included; no Python or Node.js installation is required. Both Mac apps are Developer ID signed and Apple-notarized. Windows and Linux downloads are portable archives. See [desktop/README.md](desktop/README.md) for installation, system requirements and build instructions. The browser launchers remain available.
 
@@ -44,7 +44,7 @@ Some models think before they answer. Scene Director asks the server to switch t
 | Field | What it does |
 | --- | --- |
 | Workflow | Generate scenes invents new scenes. Change an image writes a targeted revision from an uploaded source image. |
-| Image model | Picks the writing profile: Krea 2 or Z-Image Turbo. |
+| Image model | Picks the writing profile: Krea 2, Z-Image Turbo or Anima. Anima adds a look, a safety tag and quality tags. |
 | Who is in the scene | One subject, or two subjects in one shared moment. A word is enough: `woman`, `an old fisherman`, `a border collie`. |
 | Character LoRA | On when you use a character LoRA. Prompts leave stable physical identity to the LoRA while allowing expression, gaze, clothing and posture. Incidental background people may be obscured; both explicitly requested subjects stay visible. |
 | How they relate | Two subjects only. Optional. Blank lets the model invent a fitting connection. |
@@ -77,7 +77,7 @@ In **Settings → ComfyUI**, enter the ComfyUI address (`http://127.0.0.1:8188` 
 
 ## How the prompts are written
 
-Both profiles write one paragraph of natural sentences per prompt, usually 100 to 180 words (140 to 220 with two subjects). No tags, weights, quality slogans or negatives. Every prompt follows the same hard rules:
+The Krea 2 and Z-Image Turbo profiles write one paragraph of natural sentences per prompt, usually 100 to 180 words (140 to 220 with two subjects). No tags, weights, quality slogans or negatives. Anima uses its own hybrid shape, described below. Every prompt follows the same hard rules:
 
 - Describe visible image content. Express atmosphere through color, light, space and gesture rather than sounds, smells or remarks about the viewer.
 - One coherent activity per subject. Supporting movements are allowed; unrelated simultaneous tasks and incompatible poses are avoided.
@@ -86,6 +86,31 @@ Both profiles write one paragraph of natural sentences per prompt, usually 100 t
 
 **Krea 2** gets one clear visual treatment per scene, with medium, light and material carrying the look.
 **Z-Image Turbo** gets objective, concrete descriptions with clear layout. It honors supplied appearance and consistency choices without forcing a new identity for each scene. Appearance details fit the kind of subject; human identity instructions are not imposed on animals or objects.
+
+### Anima
+
+**Anima** (CircleStone Labs) and its finetunes read hybrid prompts, so this profile writes a different shape:
+
+```
+masterpiece, best quality, highres, score_7, score_8, safe, realistic, 1girl, solo, apron, workshop, from side. A woman in a canvas apron carves a wooden spoon at a workbench. Window light from the left catches the curled shavings on the bench.
+```
+
+- **Tag block.** Scene Director writes it, never the language model: your quality tags, the safety tag, then the style tags of the chosen look. The style tags come last because they steer the look.
+- **Tag lead.** The language model writes the subject count (`1girl`, `1boy`, `solo`, `no humans`) and a few common Danbooru or Gelbooru tags, lowercase with spaces. Quality, safety and style tags that it adds anyway are removed.
+- **Description.** At least two natural sentences, usually 50 to 100 words (80 to 130 with two subjects). Anima's text encoder is small, so compact and concrete works best.
+
+| Look | Style tags | Written as |
+| --- | --- | --- |
+| Anime | `anime` | An anime illustration with clean linework and cel shading. No camera terms. |
+| Anime screencap | `anime screenshot` | A frame from an animated series. |
+| Semi-realistic | `realistic` | A painterly render between anime and realism, with detailed skin and soft shading. |
+| Realistic | `real life, realistic` | A realistic photograph. For realistic finetunes such as CyberRealistic Anima. |
+
+The quality tags default to `masterpiece, best quality, highres, score_7, score_8`. Raise the score tags for a more polished finish, lower them for a plainer anime feel, or clear the field for checkpoints that advise against quality tags, such as Anima Aesthetic. The safety tag is `safe` by default; choose `sensitive`, `nsfw`, `explicit` or none to match your brief. For an artist style, put `@artist name` in **Prefix every prompt**; it lands right after the tag block, together with a LoRA trigger if you use one.
+
+With a character LoRA, the tag lead holds no hair, eye, skin or body tags, and a draft that adds them is replaced. Base Anima is an anime model and weak at realism; the realistic looks are meant for finetunes trained in that direction. Scene Director writes no negative prompts. The page shows a suggested one to copy: `worst quality, low quality, sketch, score_1, score_2, score_3, censored`.
+
+In **Change an image**, a full revised prompt for Anima starts with the same tag block. Edit instructions are written without it.
 
 Broad work directions (`jobs`, `occupations`, `beroepen`) explore different real occupations. A narrow direction such as `working as a night-shift nurse` keeps that role in every prompt and varies unspecified moments and compositions. A reference to work in extra wishes, an exclusion or a phrase such as `exercise after work` does not turn an unrelated direction into a jobs brief. Specific choices take priority over generic variety guidance.
 
@@ -182,7 +207,7 @@ The selected language model must support image input. Settings labels known visi
 
 The preview appears before you start. **Write** sends the image to your selected model server with the brief for each batch. The app holds it in this tab and the running process; it does not save the upload in settings, browser storage or prompt files. Mode and notes can be remembered, but the image must be selected again after a reload. **Remove image** returns future runs to text-only input. A run already started keeps the image it started with.
 
-This remains a prompt-writing tool: it does not directly run Krea 2 or Z-Image Turbo, edit the uploaded image or apply an image-to-image strength setting.
+This remains a prompt-writing tool: it does not directly run Krea 2, Z-Image Turbo or Anima, edit the uploaded image or apply an image-to-image strength setting.
 
 ## Generation settings
 
@@ -220,6 +245,7 @@ Any OpenAI-compatible server works. Click the connection status, choose **Ollama
 ```
 python3 scene_director.py woman jobs 10
 python3 scene_director.py woman jobs 10 --target z-image-turbo
+python3 scene_director.py woman jobs 10 --target anima --anima-look realistic --anima-safety none
 python3 scene_director.py woman jobs 10 --subject2 man --interaction "colleagues sharing a task"
 python3 scene_director.py woman sport 10 --subject2 man --identity free --identity2 free
 python3 scene_director.py person "quiet daily moments" 8 -p "setting=indoors" --avoid rain --avoid cafes
@@ -261,9 +287,14 @@ python3 scene_director.py --help
 | `web/app.js`, `web/app.css` | Prompt Studio script and styles. |
 | `web/dataset.js`, `web/dataset-core.js`, `web/dataset.css` | The LoRA Dataset tool and its tested core functions. |
 | `test_features.py` | Tests for the 3.9 features. |
+| `test_anima.py` | Tests for the Anima profile, its looks and the tag block. |
 | `test_robustness.py` | Tests for rotating-choice slots, damaged settings files, unexpected server errors, the private browser link, folder opening, page security and output filters. |
 | `settings.json` | Created when you save connection settings. Holds your API key if you saved one, so do not share it. |
 | `briefs.json`, `caption_scripts.json` | Saved briefs and saved caption scripts, next to `settings.json`. |
+
+## What changed in 3.10.0
+
+- New image model: **Anima**. Hybrid prompts with a tag block written by the app, a short tag lead and a compact description. Four looks (anime, anime screencap, semi-realistic, realistic), a safety tag, editable quality tags and a suggested negative prompt to copy. Works in Generate scenes, Change an image, History, saved briefs, **New version** and the terminal (`--target anima`).
 
 ## What changed in 3.9.1
 
@@ -377,3 +408,5 @@ To upgrade, use the new app files in your existing Scene Director folder while k
 - Krea 2 prompting guide: https://github.com/krea-ai/krea-2/blob/main/docs/prompting.md
 - Krea 2 expansion prompt: https://github.com/krea-ai/krea-2/blob/main/docs/expansion.txt
 - Z-Image Turbo prompt enhancer: https://huggingface.co/spaces/Tongyi-MAI/Z-Image-Turbo/blob/main/pe.py
+- Anima model card, prompting section: https://huggingface.co/circlestone-labs/Anima
+- CyberRealistic Anima, style slot and realistic looks: https://civitai.com/models/2668799/cyberrealistic-anima

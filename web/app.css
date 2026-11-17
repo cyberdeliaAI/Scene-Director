@@ -313,6 +313,13 @@ dialog::backdrop { background: rgba(10, 12, 16, .6); }
 .image-dropzone:focus-within { outline: 2px solid var(--accent); outline-offset: 3px; }
 .image-dropzone .image-file { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; }
 .seg.workflows { display: grid; grid-template-columns: 1fr 1fr; }
+.anima-options { margin-top: 14px; }
+.anima-options .label { margin-top: 12px; }
+.anima-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.anima-row .label { margin-top: 0; }
+.anima-quality { display: flex; gap: 10px; align-items: center; }
+.anima-quality input { flex: 1; min-width: 0; }
+.anima-block { overflow-wrap: anywhere; }
 .prompt-edit-text { white-space: pre-wrap; }
 .preset-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
 #rewriteSystem { min-height: 210px; font-size: 13px; line-height: 1.55; }

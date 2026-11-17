@@ -168,15 +168,16 @@ class UnexpectedErrorTests(unittest.TestCase):
 
     def test_get_and_post_answer_with_json_and_log_only_type_and_place(self):
         stderr = io.StringIO()
-        with warnings.catch_warnings(), contextlib.redirect_stderr(stderr), \
-                mock.patch.object(self.app, "history", side_effect=KeyError("sk-secret-in-message")), \
-                mock.patch.object(self.app, "favorite", side_effect=ValueError("bad value")):
-            # Other completed tests may release file objects during this short stderr capture.
-            # Keep the exact diagnostic/privacy assertions independent of Python cleanup warnings.
+        with warnings.catch_warnings():
+            # Set the filter before redirecting stderr or constructing mocks: their
+            # setup can itself collect file objects left by earlier tests.
             warnings.simplefilter("ignore", ResourceWarning)
-            get_status, get_body = self.call("/api/history")
-            post_status, post_body = self.call("/api/favorite", {"prompt": "x"})
-            state_status, _ = self.call("/api/state")
+            with contextlib.redirect_stderr(stderr), \
+                    mock.patch.object(self.app, "history", side_effect=KeyError("sk-secret-in-message")), \
+                    mock.patch.object(self.app, "favorite", side_effect=ValueError("bad value")):
+                get_status, get_body = self.call("/api/history")
+                post_status, post_body = self.call("/api/favorite", {"prompt": "x"})
+                state_status, _ = self.call("/api/state")
         self.assertEqual((get_status, get_body["ok"]), (500, False))
         self.assertIn("KeyError", get_body["error"])
         self.assertEqual((post_status, post_body["ok"]), (500, False))

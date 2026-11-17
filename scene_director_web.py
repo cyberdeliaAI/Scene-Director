@@ -888,7 +888,7 @@ def make_handler(app, port_holder, auth_token=None, session_token=None):
                 return self._send(200, {
                     "ok": True, "version": engine.VERSION, "settings": app.settings(),
                     "presets": {k: {"label": v[0], "url": v[1]} for k, v in engine.SERVER_PRESETS.items()},
-                    "default_output_dir": str(engine.OUTPUT_DIR),
+                    "default_output_dir": str(engine.OUTPUT_DIR), "anima": engine.anima_options(),
                     "sampling_defaults": engine.validate_sampling(),
                     "precise_defaults": engine.validate_sampling(defaults=engine.PRECISE_DEFAULTS),
                     "job": {"id": job.id, "finished": job.finished, "workflow": job.workflow} if job else None,

@@ -161,7 +161,7 @@ Menu.setApplicationMenu(Menu.buildFromTemplate([
   { role: 'windowMenu' },
 ]));
 app.setAboutPanelOptions({ applicationName: 'Scene Director', applicationVersion: app.getVersion(),
-  version: process.platform === 'darwin' ? (process.arch === 'arm64' ? 'Apple Silicon' : 'Intel') : process.platform === 'win32' ? 'Windows x64' : 'Linux x64', copyright: 'Prompt writing for Krea 2 and Z-Image Turbo' });
+  version: process.platform === 'darwin' ? (process.arch === 'arm64' ? 'Apple Silicon' : 'Intel') : process.platform === 'win32' ? 'Windows x64' : 'Linux x64', copyright: 'Prompt writing for Krea 2, Z-Image Turbo and Anima' });
 
 if (!app.requestSingleInstanceLock()) {
   app.quit();
