@@ -13,7 +13,7 @@
 <header class="top">
   <div class="brand">
     <div class="brand-title"><img class="brand-mark" src="/app-icon.png" alt="" width="42" height="42"><h1>Scene Director</h1></div>
-    <p>Give a direction. Get distinct, surprising prompts for Krea 2 and Z-Image Turbo.</p>
+    <p>Give a direction. Get distinct, surprising prompts for Krea 2, Z-Image Turbo and Anima.</p>
   </div>
   <button type="button" class="conn-pill" id="connPill" aria-haspopup="dialog" title="Connection and generation settings">
     <span class="dot" id="connDot"></span><span id="connText">Checking connection</span>
@@ -44,8 +44,41 @@
       <div class="seg" role="radiogroup" aria-label="Image model">
         <label><input type="radio" name="target" value="krea2" checked><span>Krea 2</span></label>
         <label><input type="radio" name="target" value="z-image-turbo"><span>Z-Image Turbo</span></label>
+        <label><input type="radio" name="target" value="anima"><span>Anima</span></label>
       </div>
       <p class="help" id="targetHint"></p>
+      <div id="animaOptions" class="anima-options" hidden>
+        <div class="anima-row">
+          <div>
+            <label class="label" for="animaLook">Look</label>
+            <select id="animaLook" data-bind="animaLook">
+              <option value="anime">Anime</option>
+              <option value="screencap">Anime screencap</option>
+              <option value="semi_real">Semi-realistic</option>
+              <option value="realistic">Realistic</option>
+            </select>
+          </div>
+          <div>
+            <label class="label" for="animaSafety">Safety tag</label>
+            <select id="animaSafety" data-bind="animaSafety">
+              <option value="safe">safe</option>
+              <option value="sensitive">sensitive</option>
+              <option value="nsfw">nsfw</option>
+              <option value="explicit">explicit</option>
+              <option value="none">No safety tag</option>
+            </select>
+          </div>
+        </div>
+        <p class="help" id="animaLookHint"></p>
+        <label class="label" for="animaQuality">Quality tags</label>
+        <div class="anima-quality">
+          <input type="text" id="animaQuality" data-bind="animaQuality" maxlength="300" placeholder="No quality tags">
+          <button type="button" class="link-btn" id="animaQualityReset">Reset</button>
+        </div>
+        <p class="help">Score tags run from score_1 to score_9. Raise them for a more polished finish, lower them for a plainer anime feel, or clear the field for checkpoints that advise against quality tags. Add an artist as <code>@artist name</code> under More options, Prefix every prompt.</p>
+        <p class="help anima-block" id="animaBlock"></p>
+        <p class="help">Suggested negative prompt: <span id="animaNegative"></span> <button type="button" class="link-btn" id="animaCopyNegative">Copy</button></p>
+      </div>
     </fieldset>
 
     <div id="promptEditControls" hidden>

@@ -2,7 +2,7 @@
 """Scene Director: turn a creative direction into English image prompts.
 
 A local language model (LM Studio by default, or any OpenAI-compatible
-server) invents distinct scenes for Krea 2 or Z-Image Turbo within your brief.
+server) invents distinct scenes for Krea 2, Z-Image Turbo or Anima within your brief.
 
 No third-party dependencies. Run without arguments to open the web interface,
 use --help for terminal use, or --dry-run to inspect the instructions without
@@ -88,7 +88,31 @@ LIST_TIMEOUT = 8
 OUTPUT_DIR = Path(__file__).resolve().parent / "prompts"
 SETTINGS_FILE = Path(__file__).resolve().parent / "settings.json"  # written by the web interface
 
-TARGET_LABELS = {"krea2": "Krea 2", "z-image-turbo": "Z-Image Turbo"}
+TARGET_LABELS = {"krea2": "Krea 2", "z-image-turbo": "Z-Image Turbo", "anima": "Anima"}
+# Anima (CircleStone Labs) reads hybrid prompts: quality and style tags, a short tag lead, then natural
+# language. The app writes the quality, safety and style tags; the language model writes the rest.
+ANIMA_QUALITY_DEFAULT = "masterpiece, best quality, highres, score_7, score_8"
+ANIMA_SAFETY = ("safe", "sensitive", "nsfw", "explicit", "none")
+ANIMA_NEGATIVE = "worst quality, low quality, sketch, score_1, score_2, score_3, censored"
+# key: (label, style tags that close the tag block, instruction for the language model)
+ANIMA_LOOKS = {
+    "anime": ("Anime", "anime",
+              "LOOK: anime illustration. Describe an anime illustration with clean linework, cel or soft shading and "
+              "clear colors. Use illustration terms for color, shading and composition. No camera, lens or photography terms."),
+    "screencap": ("Anime screencap", "anime screenshot",
+                  "LOOK: anime screencap. Describe a frame from an animated series: cel shading, a painted background "
+                  "and the framing of a film shot. No camera hardware, lens or photography terms."),
+    "semi_real": ("Semi-realistic", "realistic",
+                  "LOOK: semi-realistic. Describe a semi-realistic, painterly render between anime and realism. Where they "
+                  "fit the scene, work in a few of these qualities: detailed skin, detailed face, detailed eyes, soft shading, "
+                  "painterly, volumetric or cinematic lighting, depth of field. Do not call it a photograph."),
+    "realistic": ("Realistic", "real life, realistic",
+                  "LOOK: realistic. Written for realistic Anima finetunes. Describe the scene as a realistic photograph: "
+                  "natural skin texture, real materials, a plausible light source and depth of field. Never call it anime, "
+                  "an illustration or a painting."),
+}
+ANIMA_LOOK_NOTE = ("With style \"auto\" this look decides the treatment. A style or medium named in the brief still "
+                   "applies; write it into the description.")
 CREATIVITY_LEVELS = ("grounded", "balanced", "adventurous")
 MAX_IMAGE_BYTES = 5 * 1024 * 1024
 REFERENCE_MODES = {
@@ -178,7 +202,7 @@ CORE_PROMPT = """You are a scene director. You turn a short creative brief into 
 
 HARD RULES
 1. Write in English, even when the brief is in another language.
-2. Each prompt is one self-contained paragraph of natural sentences, usually {word_range} words. No lists, tags or headings.
+2. {shape}
 3. Describe visible features of the intended image. No sounds, smells, sensations, thoughts, intentions, skills, backstory or remarks about the viewer. Express atmosphere through visible choices in color, light, space and gesture.
 4. Give each principal subject one coherent activity. Supporting movements belong to it, such as steadying material while cutting it. Avoid unrelated simultaneous tasks or physically incompatible poses.
 5. For photography and realistic scenes, describe a plausible main light source and its effect when useful. For illustration, graphic or abstract work, describe the appropriate color, shading or visual structure; do not force camera or physical-lighting terminology.
@@ -228,7 +252,17 @@ THEME_TWO_SUBJECTS = {
     "work": "With two subjects, show two plausible roles in the same working moment. Preserve fixed roles and tasks; vary their unspecified work details and interaction across prompts.",
 }
 
+PROMPT_SHAPE = "Each prompt is one self-contained paragraph of natural sentences, usually {word_range} words. No lists, tags or headings."
+ANIMA_SHAPE = ("Each prompt is one line: a short tag lead, then a natural-language description of usually {word_range} words, "
+               "as the TARGET section defines. No lists or headings, and no tags outside the tag lead.")
+
 TARGET_PROFILES = {
+    "anima": """TARGET: Anima
+Anima reads a hybrid prompt: a short lead of booru-style tags, followed by a natural-language description. Write each prompt as one line in this shape: tag lead. Description.
+The app adds the quality, safety and style tags in front of your text. Never write tags such as masterpiece, best quality, highres, score_7, safe, nsfw, anime or realistic, and never write artist tags.
+TAG LEAD: lowercase tags separated by commas, with spaces instead of underscores, no parentheses and no weights. Begin with the subject count: 1girl, 1boy or 1other together with solo for one subject; a pair such as "1girl, 1boy" or 2girls for two; no humans when nobody is shown. These count tags are also used for adult women and men. Then add three to six common Danbooru or Gelbooru tags for clothing, action, place or framing that the description also shows. Leave out any tag you are not sure exists; the description carries the scene. For a named character from a series, add the tag "character name from series name". For "lora" subjects the lead holds no hair, eye, skin or body tags. End the lead with a period.
+DESCRIPTION: at least two natural sentences. Name each subject, then describe clothing, action, place, composition and light in plain, concrete words. Capitalize character and series names normally. With two subjects, tell them apart by role, clothing or position and attach every detail to one of them. Keep it compact: this model's text encoder is small, so a few clear details work better than long ornate sentences. Place the most defining visual details near the end.
+Shape only, never reuse its content: "1girl, solo, raincoat, bus stop, night, from side. A woman in a yellow raincoat waits at a glass bus stop at night. Wet asphalt reflects the red tail lights of a passing bus, and a single street lamp lights her from above." """,
     "krea2": """TARGET: Krea 2
 Write a cohesive descriptive paragraph. Choose one clear visual treatment that serves the idea and let medium, color, light and material carry the look. The opening may introduce the medium or the subject, whichever defines the image more clearly. Group each subject with their own attributes and activity and state spatial relationships plainly. Develop a few strong, specific details instead of covering every surface. Prefer accurate, useful words over ornate vocabulary or unnecessary specification.""",
     "z-image-turbo": """TARGET: Z-Image Turbo
@@ -293,6 +327,9 @@ class Brief:
     output_prefix: str = ""
     seed_scenes: list = field(default_factory=list)
     save_output: bool = True
+    anima_look: str = "anime"
+    anima_quality: str = ANIMA_QUALITY_DEFAULT
+    anima_safety: str = "safe"
 
     @property
     def scene_mode(self):
@@ -336,15 +373,21 @@ def per_prompt_choices(parameters, count, offset=0):
             for index in range(count)]
 
 
-def system_prompt(target, scene_mode="single", theme=None):
-    word_range = "140-220" if scene_mode == "two_subjects" else "100-180"
-    parts = [CORE_PROMPT.format(word_range=word_range), IDENTITY_RULES, SCENE_MODES[scene_mode]]
+def system_prompt(target, scene_mode="single", theme=None, look="anime"):
+    two = scene_mode == "two_subjects"
+    if target == "anima":
+        shape = ANIMA_SHAPE.format(word_range="80-130" if two else "50-100")
+    else:
+        shape = PROMPT_SHAPE.format(word_range="140-220" if two else "100-180")
+    parts = [CORE_PROMPT.format(shape=shape), IDENTITY_RULES, SCENE_MODES[scene_mode]]
     if theme in THEME_NOTES:
         note = THEME_NOTES[theme]
         if scene_mode == "two_subjects" and theme in THEME_TWO_SUBJECTS:
             note += "\n" + THEME_TWO_SUBJECTS[theme]
         parts.append(note)
-    parts.append(TARGET_PROFILES[target])
+    parts.append(TARGET_PROFILES[target].strip())
+    if target == "anima":
+        parts.append(ANIMA_LOOKS[look][2] + " " + ANIMA_LOOK_NOTE)
     return "\n\n".join(parts)
 
 
@@ -355,7 +398,7 @@ def brief_system_prompt(brief):
         return brief.rewrite_system
     if brief.workflow == "change_image":
         return CHANGE_IMAGE_PROMPT + "\n\n" + EDIT_OUTPUTS[brief.edit_output]
-    prompt = system_prompt(brief.target, brief.scene_mode, brief.theme)
+    prompt = system_prompt(brief.target, brief.scene_mode, brief.theme, brief.anima_look)
     if rotating_parameters(brief.parameters):
         prompt += "\n\n" + ROTATION_RULES
     if brief.reference:
@@ -1191,6 +1234,9 @@ def brief_identity_violation(prompt, brief):
     # so with one protected and one free subject only the instructions apply.
     if brief.second_subject and brief.second_identity_mode != brief.identity_mode:
         return False
+    if brief.target == "anima" and brief.identity_mode == "lora":
+        if any(ANIMA_IDENTITY_TAG_RE.fullmatch(tag) for tag in anima_tidy(prompt)[0]):
+            return True
     return identity_violation(prompt, brief.identity_mode)
 
 
@@ -1253,6 +1299,66 @@ def with_prefix(prefix, prompt):
     return prefix + (" " if prefix[-1] in ",;:." else ", ") + prompt
 
 
+ANIMA_COUNT = r"\d\+?(?:girl|boy|other)s?"
+ANIMA_COUNT_RE = re.compile(rf"(?:{ANIMA_COUNT}(?: {ANIMA_COUNT})*|solo|no humans|multiple (?:girls|boys|others))")
+# Tags the app writes itself, so a model that adds them anyway does not double them or override the chosen look.
+ANIMA_APP_TAG_RE = re.compile(r"(?:masterpiece|(?:best|good|normal|high|low|worst) quality|highres|absurdres|score \d(?: up)?|"
+                              r"safe|sensitive|nsfw|explicit|anime|anime screencap|anime screenshot|realistic|real life|"
+                              r"photorealistic|@.+)")
+ANIMA_IDENTITY_TAG_RE = re.compile(
+    r"(?:.+ hair|ponytail|twintails|twin braids|braid|braided ponytail|hair bun|double bun|bob cut|pixie cut|hime cut|"
+    r"bangs|blunt bangs|ahoge|sidelocks|(?:blue|green|brown|hazel|grey|gray|amber|red|purple|yellow|pink|aqua|black|orange|"
+    r"golden|violet) eyes|dark skin|pale skin|tan|tanned|dark-skinned (?:female|male)|freckles|mole|flat chest|"
+    r"(?:small|medium|large|huge) breasts|muscular|petite|curvy|plump)")
+
+
+def anima_tag_block(brief):
+    """Quality tags, the safety tag and the look's style tags. The style tags come last: they steer the look."""
+    style = [tag.strip() for tag in ANIMA_LOOKS[brief.anima_look][1].split(",")]
+    tags = [" ".join(tag.split()) for tag in brief.anima_quality.split(",")]
+    if brief.anima_safety != "none":
+        tags.append(brief.anima_safety)
+    block = []
+    for tag in tags:
+        if tag and tag.casefold() not in style and tag.casefold() not in [seen.casefold() for seen in block]:
+            block.append(tag)
+    return ", ".join(block + style)
+
+
+def anima_tidy(prompt):
+    """Normalize the tag lead of an Anima prompt. Returns (lead tags, prompt); no tags when there is no lead."""
+    lead, separator, rest = prompt.partition(". ")
+    tags = [" ".join(tag.replace("_", " ").split()).lower() for tag in lead.split(",")]
+    tags = [tag for tag in tags if tag]
+    if (not separator or not rest.strip() or not tags or not ANIMA_COUNT_RE.fullmatch(tags[0])
+            or any(len(tag.split()) > 6 for tag in tags)):
+        return [], prompt
+    tags = tags[0].split() + tags[1:] if re.fullmatch(rf"{ANIMA_COUNT}(?: {ANIMA_COUNT})+", tags[0]) else tags
+    kept = []
+    for tag in tags:
+        if tag not in kept and not ANIMA_APP_TAG_RE.fullmatch(tag):
+            kept.append(tag)
+    return kept, ", ".join(kept) + ". " + rest.strip()
+
+
+def finished_text(brief, prompt):
+    """The saved prompt: the model's text plus the user's prefix and, for Anima, the tag block."""
+    full_edit = brief.workflow == "change_image" and brief.edit_output == "full_prompt"
+    text = with_prefix(brief.output_prefix, prompt) if brief.workflow == "scenes" else prompt
+    if brief.target != "anima" or not (brief.workflow == "scenes" or full_edit):
+        return text
+    block = anima_tag_block(brief)
+    # A tag lead or prefix continues the tag list; a plain description starts a new sentence.
+    tagged = brief.workflow == "scenes" and bool(brief.output_prefix.strip() or anima_tidy(prompt)[0])
+    return block + (", " if tagged else ". ") + text if block else text
+
+
+def anima_options():
+    """Anima choices for the web interface, so the page shows exactly what the engine writes."""
+    return {"looks": {key: {"label": label, "tags": tags} for key, (label, tags, _) in ANIMA_LOOKS.items()},
+            "quality": ANIMA_QUALITY_DEFAULT, "safety": list(ANIMA_SAFETY), "negative": ANIMA_NEGATIVE}
+
+
 def scene_note(idea, prompt):
     """A short memory line for one accepted scene, sent back to avoid repeats."""
     if idea:
@@ -1303,6 +1409,8 @@ def request_record(brief, count):
     elif brief.workflow == "rewrite":
         record.update(rewrite_prompt=brief.rewrite_prompt, rewrite_system=brief.rewrite_system,
                       rewrite_use_vision=brief.rewrite_use_vision)
+    if brief.target == "anima" and brief.workflow in ("scenes", "change_image"):
+        record.update(anima_look=brief.anima_look, anima_quality=brief.anima_quality, anima_safety=brief.anima_safety)
     if brief.reference:
         record["reference"] = {"mode": brief.reference.mode, "notes": brief.reference.notes, "image": "not stored"}
     return record
@@ -1525,6 +1633,8 @@ def run(brief, count, client, emit, batch_size=BATCH_SIZE, output_dir=OUTPUT_DIR
             for position, idea, prompt in parse_reply_positions(reply, min_words=min_words):
                 if rotation and position >= n:
                     continue  # an extra draft was written without requested choices
+                if brief.target == "anima" and brief.workflow == "scenes":
+                    prompt = anima_tidy(prompt)[1]
                 if has_prompt_metadata(prompt):
                     feedback.append("Remove LoRA or identity notes and numbered subject labels. Write only the visible scene.")
                     emit({"type": "notice", "level": "warn",
@@ -1554,7 +1664,7 @@ def run(brief, count, client, emit, batch_size=BATCH_SIZE, output_dir=OUTPUT_DIR
                 if rotation:
                     choice = rotation[batch_slots[position]]
                     open_slots.remove(batch_slots[position])
-                text = with_prefix(brief.output_prefix, prompt) if brief.workflow == "scenes" else prompt
+                text = finished_text(brief, prompt)
                 prompts.append(text)
                 ideas_out.append(idea or "")
                 choices_out.append(choice)
@@ -1681,7 +1791,7 @@ def request_from_json(data):
                "api_url", "api_key", "model", "output_dir", "batch_size", "timeout", "live", "sampling", "reference_image",
                "workflow", "changes", "edit_output", "preserve", "source_prompt",
                "rewrite_prompt", "rewrite_system", "rewrite_use_vision", "caption_trigger", "caption_traits",
-               "output_prefix", "previous_scenes", "save_output"}
+               "output_prefix", "previous_scenes", "save_output", "anima_look", "anima_quality", "anima_safety"}
     if set(data) - allowed:
         raise GenerationError("Unsupported request field: " + ", ".join(sorted(set(data) - allowed)))
 
@@ -1707,6 +1817,14 @@ def request_from_json(data):
     if "output_prefix" in data and (workflow != "scenes" or not isinstance(data["output_prefix"], str)
                                     or len(data["output_prefix"]) > 200 or "\n" in data["output_prefix"]):
         raise GenerationError("The prompt prefix is one line of at most 200 characters, for Generate scenes.")
+    anima_look, anima_safety = text("anima_look", "anime"), text("anima_safety", "safe")
+    if anima_look not in ANIMA_LOOKS:
+        raise GenerationError("Choose an Anima look: " + ", ".join(ANIMA_LOOKS) + ".")
+    if anima_safety not in ANIMA_SAFETY:
+        raise GenerationError("Choose an Anima safety tag: " + ", ".join(ANIMA_SAFETY) + ".")
+    anima_quality = data.get("anima_quality", ANIMA_QUALITY_DEFAULT)
+    if not isinstance(anima_quality, str) or len(anima_quality) > 300 or "\n" in anima_quality:
+        raise GenerationError("Anima quality tags are one line of at most 300 characters.")
     seeds = data.get("previous_scenes", [])
     if not isinstance(seeds, list) or len(seeds) > MAX_SEED_SCENES or not all(isinstance(s, str) and len(s) <= 300 for s in seeds):
         raise GenerationError("previous_scenes must be a list of at most 300 short scene notes.")
@@ -1775,6 +1893,7 @@ def request_from_json(data):
         output_prefix=" ".join(text("output_prefix").split()),
         seed_scenes=[" ".join(s.split()) for s in seeds if s.strip()],
         save_output=data.get("save_output", True) is not False,
+        anima_look=anima_look, anima_quality=" ".join(anima_quality.split()), anima_safety=anima_safety,
     )
     if workflow == "change_image":
         brief.subject, brief.direction = "source image", "apply requested visual changes"
@@ -1803,13 +1922,14 @@ def request_from_json(data):
 def make_parser():
     parser = argparse.ArgumentParser(
         prog="scene_director.py",
-        description=f"{APP_NAME} {VERSION}: let a local LLM invent Krea 2 or Z-Image Turbo prompts within your brief.",
+        description=f"{APP_NAME} {VERSION}: let a local LLM invent Krea 2, Z-Image Turbo or Anima prompts within your brief.",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog='''Run without arguments to open the web interface.
 
 Examples:
   python3 scene_director.py woman sport 10
   python3 scene_director.py woman jobs 10 --target z-image-turbo
+  python3 scene_director.py woman jobs 10 --target anima --anima-look realistic
   python3 scene_director.py woman jobs 10 --subject2 man --interaction "colleagues sharing a task"
   python3 scene_director.py person "quiet daily moments" 8 \\
     -p "setting=indoors" -p "palette=muted earth tones" --avoid rain --avoid cafes
@@ -1841,6 +1961,12 @@ Environment: SCENE_DIRECTOR_API_URL, SCENE_DIRECTOR_API_KEY, SCENE_DIRECTOR_MODE
     parser.add_argument("--changes", default="", help="requested visual changes for the change_image workflow")
     parser.add_argument("--edit-output", choices=tuple(EDIT_OUTPUTS), default="full_prompt")
     parser.add_argument("--preserve", default="", help="optional explicit preservation notes for image changes")
+    parser.add_argument("--anima-look", choices=tuple(ANIMA_LOOKS), default="anime",
+                        help="with --target anima: the look the prompts are written and tagged for (default: anime)")
+    parser.add_argument("--anima-quality", default=ANIMA_QUALITY_DEFAULT,
+                        help="with --target anima: quality tags that open every prompt")
+    parser.add_argument("--anima-safety", choices=ANIMA_SAFETY, default="safe",
+                        help="with --target anima: safety tag for every prompt (default: safe)")
     parser.add_argument("--creativity", choices=CREATIVITY_LEVELS, default=None,
                         help="how unexpected the scenes may be (default: balanced)")
     parser.add_argument("--interactive", action="store_true", help="ask the optional questions in the terminal")
@@ -1908,6 +2034,7 @@ def main(argv=None):
             brief, count, _ = request_from_json({"workflow": "change_image", "target": args.target,
                 "count": args.count if args.count is not None else 1, "changes": args.changes,
                 "edit_output": args.edit_output, "preserve": args.preserve,
+                "anima_look": args.anima_look, "anima_quality": args.anima_quality, "anima_safety": args.anima_safety,
                 "reference_image": {"data_url": image.data_url}})
             sampling = saved_sampling(profile="precise")
         except GenerationError as exc:
@@ -1959,6 +2086,8 @@ def main(argv=None):
     brief = Brief(subject, direction, args.style, creativity or "balanced", args.identity,
                   parameters, avoid, wishes or "", args.target,
                   (args.subject2 or "").strip(), args.identity2, interaction or "")
+    brief.anima_look, brief.anima_safety = args.anima_look, args.anima_safety
+    brief.anima_quality = " ".join(args.anima_quality.split())
     if args.reference_image:
         try:
             brief.reference = reference_from_file(args.reference_image, args.reference_mode, args.reference_notes)
@@ -1967,6 +2096,9 @@ def main(argv=None):
     if args.dry_run:
         print(brief_system_prompt(brief))
         print("\nCREATIVE BRIEF\n" + build_user_message(brief, min(args.batch_size, count), []))
+        if brief.target == "anima":
+            print("\nANIMA TAG BLOCK (added by the app)\n" + anima_tag_block(brief))
+            print("\nSUGGESTED NEGATIVE PROMPT\n" + ANIMA_NEGATIVE)
         return 0
     try:
         sampling = saved_sampling()

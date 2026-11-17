@@ -7,7 +7,8 @@
   const HINTS = {
     target: {
       "krea2": "Cohesive scenes with one clear visual treatment. Medium, light and material carry the look.",
-      "z-image-turbo": "Concrete scenes with clear layout and interaction. Your appearance and consistency choices stay in control."
+      "z-image-turbo": "Concrete scenes with clear layout and interaction. Your appearance and consistency choices stay in control.",
+      "anima": "Hybrid prompts for Anima and its finetunes: quality and style tags, a short tag lead, then a compact description."
     },
     creativity: {
       grounded: "Familiar situations, observed with fresh detail.",
@@ -31,7 +32,18 @@
     target: "krea2", mode: "single", subject: "woman", lora: true,
     first: "woman", firstLora: true, second: "man", secondLora: false, interaction: "",
     direction: "jobs", count: 10, creativity: "balanced",
-    style: "", wishes: "", avoid: [], fixed: [], outputPrefix: "", referenceMode: "inspiration", referenceNotes: ""
+    style: "", wishes: "", avoid: [], fixed: [], outputPrefix: "", referenceMode: "inspiration", referenceNotes: "",
+    animaLook: "anime", animaQuality: "masterpiece, best quality, highres, score_7, score_8", animaSafety: "safe"
+  };
+  // Replaced by the service's own values at startup, so the preview always matches what the engine writes.
+  let anima = { quality: brief.animaQuality, negative: "worst quality, low quality, sketch, score_1, score_2, score_3, censored",
+    safety: ["safe", "sensitive", "nsfw", "explicit", "none"],
+    looks: { anime: { tags: "anime" }, screencap: { tags: "anime screenshot" }, semi_real: { tags: "realistic" }, realistic: { tags: "real life, realistic" } } };
+  const ANIMA_LOOK_HINTS = {
+    anime: "Anime illustration with clean linework and cel shading. Fits base Anima and anime finetunes.",
+    screencap: "Looks like a frame from a TV anime.",
+    semi_real: "A painterly render between anime and realism, with detailed skin and soft shading.",
+    realistic: "Realistic-leaning and written like a photograph. For realistic finetunes such as CyberRealistic Anima."
   };
   const reference = { data_url: null, name: "", loading: false, revision: 0 };
   const REFERENCE_HINTS = {
@@ -192,7 +204,35 @@
   function renderHints() {
     $("#targetHint").textContent = HINTS.target[brief.target];
     $("#surpriseHint").textContent = HINTS.creativity[brief.creativity];
+    renderAnima();
   }
+  // The tag block the engine puts in front of every Anima prompt: quality tags, safety tag, then the look's style tags.
+  function animaBlock() {
+    const style = anima.looks[brief.animaLook].tags.split(",").map(tag => tag.trim());
+    const tags = brief.animaQuality.split(",").map(tag => tag.trim().split(/\s+/).join(" "));
+    if (brief.animaSafety !== "none") tags.push(brief.animaSafety);
+    const block = [];
+    for (const tag of tags) {
+      if (tag && !style.includes(tag.toLowerCase()) && !block.some(seen => seen.toLowerCase() === tag.toLowerCase())) block.push(tag);
+    }
+    return block.concat(style).join(", ");
+  }
+  function renderAnima() {
+    if (!(brief.animaLook in anima.looks)) brief.animaLook = "anime";
+    if (!anima.safety.includes(brief.animaSafety)) brief.animaSafety = "safe";
+    $("#animaOptions").hidden = brief.target !== "anima";
+    $("#animaLook").value = brief.animaLook; $("#animaSafety").value = brief.animaSafety;
+    $("#animaLookHint").textContent = ANIMA_LOOK_HINTS[brief.animaLook];
+    $("#animaQualityReset").hidden = brief.animaQuality.trim() === anima.quality;
+    $("#animaNegative").textContent = anima.negative;
+    $("#animaBlock").textContent = brief.workflow === "change_image" && brief.editOutput === "edit_instruction"
+      ? "Edit instructions are written without these tags."
+      : `Every prompt starts with: ${animaBlock()}`;
+  }
+  $("#animaQualityReset").addEventListener("click", () => {
+    brief.animaQuality = anima.quality; $("#animaQuality").value = anima.quality; changed();
+  });
+  $("#animaCopyNegative").addEventListener("click", () => copyText(anima.negative, $("#animaCopyNegative"), "Copy"));
   function renderChips() {
     for (const box of $$("[data-chips]")) {
       const key = box.dataset.chips;
@@ -229,7 +269,7 @@
     const n = Math.round(Number(value));
     return Number.isFinite(n) ? Math.min(500, Math.max(1, n)) : 10;
   }
-  function changed() { renderChips(); renderStart(); renderBadge(); renderReference(); saveBrief(); }
+  function changed() { renderChips(); renderStart(); renderBadge(); renderReference(); renderAnima(); saveBrief(); }
 
   function renderReference() {
     $("#referenceOptions").hidden = !reference.data_url;
@@ -921,6 +961,7 @@
       reference_image: { data_url: reference.data_url, mode: "scene", notes: "" },
       api_url: conn.api_url, api_key: conn.api_key, model: conn.model, output_dir: conn.output_dir || defaultOutputDir
     };
+    if (brief.target === "anima") Object.assign(request, { anima_look: brief.animaLook, anima_quality: brief.animaQuality.trim(), anima_safety: brief.animaSafety });
     if (rewriting) {
       request = { workflow: "rewrite", count: 1, rewrite_prompt: brief.rewritePrompt.trim(),
         rewrite_system: brief[rewriteKeys()[0]].trim(), rewrite_use_vision: brief.rewriteVision,
@@ -1165,6 +1206,11 @@
     const workflow = ["scenes", "change_image", "rewrite", "edit_prompt"].includes(record.workflow) ? record.workflow : "scenes";
     brief.workflow = workflow;
     if (record.target in HINTS.target) brief.target = record.target;
+    if (record.target === "anima") {
+      if (record.anima_look in anima.looks) brief.animaLook = record.anima_look;
+      if (typeof record.anima_quality === "string") brief.animaQuality = record.anima_quality;
+      if (anima.safety.includes(record.anima_safety)) brief.animaSafety = record.anima_safety;
+    }
     if (workflow === "scenes") {
       const two = !!record.subject2;
       Object.assign(brief, { mode: two ? "two" : "single", interaction: record.interaction || "", direction: record.direction || "",
@@ -1307,6 +1353,7 @@
       samplingDefaults = state.sampling_defaults || samplingDefaults;
       preciseDefaults = state.precise_defaults || preciseDefaults;
       defaultOutputDir = state.default_output_dir || "";
+      if (state.anima && state.anima.looks) { anima = state.anima; renderAnima(); }
       Object.assign(conn, state.settings || {});
       if (!conn.output_dir) conn.output_dir = defaultOutputDir;
       settingsWarning = (state.settings && state.settings.settings_warning) || "";

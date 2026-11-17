@@ -131,19 +131,20 @@ class DesktopTests(unittest.TestCase):
 
     def test_worker_scenes_and_image_edits(self):
         edit = "Change her hair to auburn and her shoes to navy blue; preserve everything else in the original image."
-        with FakeServer([reply("carves a spoon"), reply("sands a chair"),
+        with FakeServer([reply("carves a spoon"), reply("sands a chair"), reply("oils a table"),
                          json.dumps({"prompts": [edit]})], vision=True) as model:
             self.launch()
-            for target in ["krea2", "z-image-turbo"]:
+            for target in ["krea2", "z-image-turbo", "anima"]:
                 self.run_job({"subject": "woman", "direction": "jobs", "count": 1,
                     "target": target, "api_url": model.url, "output_dir": str(self.output_dir)})
             self.run_job({"workflow": "change_image", "changes": "Change hair and shoes.",
                 "edit_output": "edit_instruction", "reference_image": reference_data(),
                 "api_url": model.url, "output_dir": str(self.output_dir)})
-            self.assertEqual(len(model.requests), 3)
+            self.assertEqual(len(model.requests), 4)
             self.assertIsInstance(model.requests[-1]["messages"][1]["content"], list)
         files = list(self.output_dir.glob("*.txt"))
-        self.assertEqual(len(files), 3)
+        self.assertEqual(len(files), 4)
+        self.assertEqual(sum(file.name.startswith("anima_") and file.read_text().startswith("masterpiece, ") for file in files), 1)
         self.assertTrue(any(file.read_text().strip() == edit for file in files))
         self.assertFalse(any("data:image" in file.read_text() for file in files))
 
