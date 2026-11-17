@@ -11,7 +11,7 @@ Give a direction. Get distinct, surprising image prompts for **Krea 2**, **Z-Ima
 
 Scene Director asks a local language model to invent the scenes for you. You set a subject and a direction like `jobs` or `sport`. The model picks different moments, places, clothing, framing and light for every prompt, within the limits you set. Prompts are always English, even when your brief is Dutch.
 
-Version 3.9.1. Python 3.9 or newer. No packages to install.
+Version 3.10.0. Python 3.9 or newer. No packages to install.
 
 Standalone desktop downloads are available for **macOS Apple Silicon**, **macOS Intel**, **Windows x64** and **Linux x64**. [Download Scene Director 3.9.1](https://github.com/cyberdeliaAI/Scene-Director/releases/tag/v3.9.1). Python is included; no Python or Node.js installation is required. Both Mac apps are Developer ID signed and Apple-notarized. Windows and Linux downloads are portable archives. See [desktop/README.md](desktop/README.md) for installation, system requirements and build instructions. The browser launchers remain available.
 
@@ -292,7 +292,7 @@ python3 scene_director.py --help
 | `settings.json` | Created when you save connection settings. Holds your API key if you saved one, so do not share it. |
 | `briefs.json`, `caption_scripts.json` | Saved briefs and saved caption scripts, next to `settings.json`. |
 
-## Changes since 3.9.1
+## What changed in 3.10.0
 
 - New image model: **Anima**. Hybrid prompts with a tag block written by the app, a short tag lead and a compact description. Four looks (anime, anime screencap, semi-realistic, realistic), a safety tag, editable quality tags and a suggested negative prompt to copy. Works in Generate scenes, Change an image, History, saved briefs, **New version** and the terminal (`--target anima`).
 
